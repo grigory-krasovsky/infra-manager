@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: infra-manager
+
+  datasource:
+    # Defaults target a locally running Postgres so `spring-boot:run` works outside Docker.
+    # docker-compose overrides these to point at the `db` service.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/inframanager}
+    username: ${DB_USERNAME:inframanager}
+    password: ${DB_PASSWORD:inframanager}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; Hibernate only checks that entities match it.
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+logging:
+  level:
+    com.example.inframanager: ${LOG_LEVEL:INFO}

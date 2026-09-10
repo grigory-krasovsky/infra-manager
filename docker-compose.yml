@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:17-alpine   # NOT 18 -- Flyway rejects PostgreSQL 18.x as "Unsupported Database"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-inframanager}
+      POSTGRES_USER: ${POSTGRES_USER:-inframanager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Mapped off 5432 so it does not collide with a Postgres already on the host.
+      - "${DB_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inframanager} -d ${POSTGRES_DB:-inframanager}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-inframanager}
+      DB_USERNAME: ${POSTGRES_USER:-inframanager}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${APP_HOST_PORT:-8080}:8080"
+    extra_hosts:
+      # Lets the container reach Bamboo/Bitbucket/Jira running on the Docker host.
+      # Native on Docker Desktop; this mapping is what makes it work on the Linux server too.
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
