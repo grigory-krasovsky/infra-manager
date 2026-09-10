@@ -13,12 +13,13 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Handles exactly one event per transaction.
+ * Обрабатывает ровно одно событие за транзакцию.
  *
- * <p>Separate from {@link InboundEventWorker} so the {@code REQUIRES_NEW} boundary
- * actually applies -- a self-invocation inside the worker would bypass the proxy.
- * One transaction per row means a crash mid-handling rolls back to PENDING and the
- * event is simply retried, with no half-finished state and no reaper to write.
+ * <p>Вынесен отдельно от {@link InboundEventWorker}, чтобы граница
+ * {@code REQUIRES_NEW} действительно применялась: вызов самого себя внутри воркера
+ * прошёл бы мимо прокси. Транзакция на строку означает, что падение посреди
+ * обработки откатывает статус в PENDING и событие просто повторяется — без
+ * недоделанного состояния и без отдельного сборщика зависших строк.
  */
 @Component
 public class InboundEventProcessor {
@@ -33,8 +34,9 @@ public class InboundEventProcessor {
     public InboundEventProcessor(InboundEventRepository repository,
                                  List<InboundEventHandler> handlers,
                                  WorkerProperties properties) {
-        // A source means one thing, so it gets one handler. Picking the first of
-        // several would silently ignore the others depending on bean ordering.
+        // Источник означает что-то одно, поэтому и обработчик у него один. Выбор
+        // первого из нескольких молча игнорировал бы остальные — в зависимости от
+        // порядка создания бинов.
         for (EventSource source : EventSource.values()) {
             List<InboundEventHandler> claiming = handlers.stream().filter(h -> h.supports(source)).toList();
             if (claiming.size() > 1) {
@@ -47,7 +49,7 @@ public class InboundEventProcessor {
         this.settings = properties.inbound();
     }
 
-    /** @return true if this call took ownership of the row */
+    /** @return true, если этот вызов забрал строку в работу */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean processOne(long id) {
         InboundEvent event = repository.lockClaimable(id).orElse(null);
@@ -63,7 +65,7 @@ public class InboundEventProcessor {
                 .orElse(null);
 
         if (handler == null) {
-            // Not an error worth retrying: no amount of waiting registers a handler.
+            // Повторять бессмысленно: сколько ни жди, обработчик сам не появится.
             log.warn("No handler for {} event {} ({}); skipping",
                     event.getSource(), event.getExternalId(), event.getEventType());
             event.setStatus(ProcessingStatus.SKIPPED);

@@ -1,11 +1,11 @@
 package com.example.inframanager.event;
 
-/** Systems that push webhooks at us. */
+/** Системы, присылающие нам вебхуки. */
 public enum EventSource {
 
-    /** Pull request events; drives Trello cards. */
+    /** События pull request'ов; управляют карточками Trello. */
     BITBUCKET,
 
-    /** Deployment results; drives Telegram notifications. */
+    /** Результаты деплоя; управляют уведомлениями в Telegram. */
     BAMBOO
 }

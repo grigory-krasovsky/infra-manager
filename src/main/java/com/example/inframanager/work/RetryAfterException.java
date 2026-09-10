@@ -3,10 +3,10 @@ package com.example.inframanager.work;
 import java.time.Duration;
 
 /**
- * Thrown when a remote API told us to slow down (HTTP 429, usually with a
- * {@code Retry-After} header). Carries the delay so the worker can honour what the
- * API asked for instead of applying its own exponential backoff -- both Trello and
- * Telegram will keep refusing until their window passes.
+ * Бросается, когда внешний API попросил сбавить темп (HTTP 429, обычно с заголовком
+ * {@code Retry-After}). Несёт в себе интервал, чтобы воркер выждал именно столько,
+ * сколько попросили, а не применял собственную экспоненциальную задержку: и Trello,
+ * и Telegram будут отказывать, пока их окно не истечёт.
  */
 public class RetryAfterException extends RuntimeException {
 

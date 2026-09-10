@@ -11,13 +11,13 @@ import org.springframework.data.repository.query.Param;
 public interface InboundEventRepository extends JpaRepository<InboundEvent, Long> {
 
     /**
-     * Inserts unless this delivery was already recorded.
+     * Вставляет, если такая доставка ещё не записана.
      *
-     * <p>{@code ON CONFLICT DO NOTHING} rather than catching a constraint violation:
-     * a violation would poison the surrounding transaction, and redelivery is a
-     * normal occurrence here, not an error.
+     * <p>{@code ON CONFLICT DO NOTHING}, а не перехват нарушения ограничения:
+     * нарушение отравило бы окружающую транзакцию, а повторная доставка здесь —
+     * обычное дело, а не ошибка.
      *
-     * @return 1 when a row was created, 0 when it was a duplicate
+     * @return 1, если строка создана, 0 — если это дубликат
      */
     @Modifying
     @Query(value = """
@@ -30,7 +30,7 @@ public interface InboundEventRepository extends JpaRepository<InboundEvent, Long
                        @Param("eventType") String eventType,
                        @Param("payload") String payload);
 
-    /** Candidate ids, read without locking; the lock is taken per row in {@link #lockClaimable}. */
+    /** Кандидаты, читаются без блокировки; блокировка берётся построчно в {@link #lockClaimable}. */
     @Query(value = """
             SELECT id FROM inbound_event
              WHERE status = 'PENDING' AND next_attempt_at <= now()
@@ -40,8 +40,9 @@ public interface InboundEventRepository extends JpaRepository<InboundEvent, Long
     List<Long> findClaimableIds(@Param("batchSize") int batchSize);
 
     /**
-     * Re-checks the row is still claimable and locks it for the caller's transaction.
-     * Empty means another worker got there first, or the row already moved on.
+     * Перепроверяет, что строку всё ещё можно взять, и блокирует её в транзакции
+     * вызывающего. Пусто означает, что её уже забрал другой воркер либо она сменила
+     * статус.
      */
     @Query(value = """
             SELECT * FROM inbound_event

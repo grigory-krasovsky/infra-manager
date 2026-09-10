@@ -1,12 +1,12 @@
 package com.example.inframanager.event;
 
 /**
- * Turns a stored webhook delivery into whatever it means -- a queued Telegram
- * message, a Trello card move. Implementations arrive with their phases:
- * Bamboo in phase 3, Bitbucket in phase 4.
+ * Превращает сохранённую доставку вебхука в то, что она означает: поставленное
+ * в очередь сообщение Telegram, перенос карточки Trello. Реализации появляются
+ * вместе со своими фазами: Bamboo в фазе 3, Bitbucket в фазе 4.
  *
- * <p>Throwing signals a retryable failure; the worker applies backoff and gives
- * up after {@code maxAttempts}.
+ * <p>Исключение означает сбой, который имеет смысл повторить; воркер выдержит
+ * паузу и сдастся после {@code maxAttempts} попыток.
  */
 public interface InboundEventHandler {
 

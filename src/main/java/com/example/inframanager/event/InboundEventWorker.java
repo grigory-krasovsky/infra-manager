@@ -6,9 +6,9 @@ import com.example.inframanager.work.WorkerProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Drains pending inbound events. Scheduled by
- * {@link com.example.inframanager.work.SchedulingConfig}; tests call
- * {@link #runOnce()} directly.
+ * Разбирает очередь входящих событий. Расписание задаёт
+ * {@link com.example.inframanager.work.SchedulingConfig}; тесты вызывают
+ * {@link #runOnce()} напрямую.
  */
 @Component
 public class InboundEventWorker {
@@ -25,7 +25,7 @@ public class InboundEventWorker {
         this.settings = properties.inbound();
     }
 
-    /** @return how many events this pass took ownership of */
+    /** @return сколько событий этот проход взял в работу */
     public int runOnce() {
         List<Long> ids = repository.findClaimableIds(settings.batchSize());
         int processed = 0;

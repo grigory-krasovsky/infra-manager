@@ -15,11 +15,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * One webhook delivery, stored verbatim before anything tries to interpret it.
+ * Одна доставка вебхука, сохранённая дословно до любых попыток её истолковать.
  *
- * <p>Rows are created by {@link InboundEventIngestService} through plain SQL with
- * {@code ON CONFLICT DO NOTHING}; this entity is used for reading and for the
- * status updates the worker makes.
+ * <p>Строки создаёт {@link InboundEventIngestService} обычным SQL с
+ * {@code ON CONFLICT DO NOTHING}; эта сущность нужна для чтения и для обновлений
+ * статуса, которые делает воркер.
  */
 @Entity
 @Table(name = "inbound_event")
@@ -34,9 +34,9 @@ public class InboundEvent {
     private EventSource source;
 
     /**
-     * Identifier taken from the delivery itself (a request id, or a synthesised one
-     * built from stable payload fields). Unique per source; this is what makes
-     * redelivery a no-op.
+     * Идентификатор, взятый из самой доставки: идентификатор запроса либо
+     * синтезированный из устойчивых полей тела. Уникален в пределах источника —
+     * именно это делает повторную доставку безвредной.
      */
     @Column(name = "external_id", nullable = false, length = 255)
     private String externalId;

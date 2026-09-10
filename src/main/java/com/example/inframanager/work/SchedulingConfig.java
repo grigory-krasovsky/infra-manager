@@ -10,9 +10,9 @@ import org.springframework.scheduling.annotation.SchedulingConfigurer;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
 /**
- * Registers the two workers programmatically rather than with {@code @Scheduled},
- * so the intervals come straight from {@link WorkerProperties} and tests can turn
- * polling off entirely instead of racing with it.
+ * Регистрирует два воркера программно, а не через {@code @Scheduled}: интервалы
+ * берутся напрямую из {@link WorkerProperties}, а тесты могут полностью выключить
+ * опрос вместо того, чтобы состязаться с ним.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling

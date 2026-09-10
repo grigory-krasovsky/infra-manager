@@ -1,20 +1,20 @@
 package com.example.inframanager.work;
 
 /**
- * Lifecycle shared by both journals ({@code inbound_event}, {@code outbound_task}).
- * Mirrored by a CHECK constraint in the schema.
+ * Жизненный цикл, общий для обоих журналов ({@code inbound_event},
+ * {@code outbound_task}). Продублирован CHECK-ограничением в схеме.
  */
 public enum ProcessingStatus {
 
-    /** Waiting to be picked up, or waiting out a retry backoff. */
+    /** Ждёт обработки либо выжидает паузу перед повторной попыткой. */
     PENDING,
 
-    /** Handled successfully. Terminal. */
+    /** Обработано успешно. Терминальный статус. */
     DONE,
 
-    /** Nothing was registered to handle it. Terminal, and a signal of misconfiguration. */
+    /** Обработчик не зарегистрирован. Терминальный статус и признак ошибки в конфигурации. */
     SKIPPED,
 
-    /** Gave up after exhausting attempts. Terminal, needs a human. */
+    /** Попытки исчерпаны. Терминальный статус, требует человека. */
     FAILED
 }

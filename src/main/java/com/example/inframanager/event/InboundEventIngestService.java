@@ -6,9 +6,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The only thing a webhook controller is allowed to do: record the delivery and
- * return. Interpreting it is the worker's job, so a slow or broken Trello cannot
- * make us time out and lose a webhook that has a limited retry budget.
+ * Единственное, что позволено контроллеру вебхука: записать доставку и вернуть
+ * ответ. Разбирать её — работа воркера, иначе медленный или сломанный Trello
+ * заставит нас выйти за таймаут и потерять вебхук с ограниченным числом повторов.
  */
 @Service
 public class InboundEventIngestService {
@@ -22,9 +22,10 @@ public class InboundEventIngestService {
     }
 
     /**
-     * @param externalId stable per delivery; redelivery of the same id is ignored
-     * @param payload    raw request body, unmodified
-     * @return true if this was a new delivery, false if it was a duplicate
+     * @param externalId устойчив в пределах одной доставки; повторная доставка того же
+     *                   идентификатора игнорируется
+     * @param payload    сырое тело запроса, без изменений
+     * @return true, если доставка новая, false — если дубликат
      */
     @Transactional
     public boolean ingest(EventSource source, String externalId, String eventType, String payload) {

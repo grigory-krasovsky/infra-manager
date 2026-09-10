@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("infra-manager.workers")
 public record WorkerProperties(
 
-        /** Set false in tests so polling does not race with explicit runOnce() calls. */
+        /** В тестах ставится в false, чтобы опрос не гонялся наперегонки с явными вызовами runOnce(). */
         @DefaultValue("true") boolean schedulingEnabled,
 
         @DefaultValue Settings inbound,
@@ -18,7 +18,7 @@ public record WorkerProperties(
 
             @DefaultValue("2s") Duration pollInterval,
 
-            /** Upper bound on rows claimed per tick; each row is still its own transaction. */
+            /** Предел строк, забираемых за проход; каждая всё равно в своей транзакции. */
             @DefaultValue("20") int batchSize,
 
             @DefaultValue("8") int maxAttempts,
