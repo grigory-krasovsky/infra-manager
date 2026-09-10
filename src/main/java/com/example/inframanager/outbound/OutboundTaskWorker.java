@@ -6,9 +6,9 @@ import com.example.inframanager.work.WorkerProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Drains queued outbound tasks. Scheduled by
- * {@link com.example.inframanager.work.SchedulingConfig}; tests call
- * {@link #runOnce()} directly.
+ * Разгребает очередь исходящих задач. Планируется в
+ * {@link com.example.inframanager.work.SchedulingConfig}; тесты вызывают
+ * {@link #runOnce()} напрямую.
  */
 @Component
 public class OutboundTaskWorker {
@@ -25,7 +25,7 @@ public class OutboundTaskWorker {
         this.settings = properties.outbound();
     }
 
-    /** @return how many tasks this pass took ownership of */
+    /** @return сколько задач этот проход забрал в работу */
     public int runOnce() {
         List<Long> ids = repository.findClaimableIds(settings.batchSize());
         int processed = 0;

@@ -9,12 +9,12 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Fallback ingestion for Bamboo installations without webhook templates.
+ * Запасной способ приёма для установок Bamboo без шаблонов вебхуков.
  *
- * <p>Keeps no cursor of its own: every pass re-reads the last few results per
- * environment and hands them to {@link InboundEventIngestService}, whose uniqueness
- * constraint drops the ones already seen. A cursor table would be one more thing to
- * get wrong after a restart, for no gain.
+ * <p>Своего курсора не держит: каждый проход перечитывает последние несколько
+ * результатов по каждому окружению и отдаёт их {@link InboundEventIngestService},
+ * ограничение уникальности которого отбрасывает уже виденные. Таблица с курсором была
+ * бы ещё одной вещью, которую можно испортить после перезапуска, — и без всякой выгоды.
  */
 public class BambooDeploymentPoller {
 
@@ -35,14 +35,14 @@ public class BambooDeploymentPoller {
         this.objectMapper = objectMapper;
     }
 
-    /** @return how many previously unseen deployments this pass recorded */
+    /** @return сколько ранее не виденных деплоев записал этот проход */
     public int runOnce() {
         int ingested = 0;
         for (BambooProperties.Poll.Environment environment : properties.poll().environments()) {
             try {
                 ingested += pollEnvironment(environment);
             } catch (Exception e) {
-                // One unreachable environment must not stop the others.
+                // Одно недоступное окружение не должно останавливать остальные.
                 log.warn("Failed to poll Bamboo environment {} ({})",
                         environment.id(), environment.environmentName(), e);
             }
@@ -72,15 +72,15 @@ public class BambooDeploymentPoller {
         return ingested;
     }
 
-    /** Normalises into the same shape the webhook path stores, so one handler serves both. */
+    /** Приводит к той же форме, что сохраняет путь с вебхуком, чтобы обоим хватило одного обработчика. */
     private BambooDeploymentEvent toEvent(BambooClient.DeploymentResult result,
                                           BambooProperties.Poll.Environment environment) {
         return new BambooDeploymentEvent(
                 result.id(),
                 result.deploymentState(),
                 result.lifeCycleState(),
-                // Names come from config here: the results endpoint does not carry them,
-                // and requiring them in config is what keeps this to one call per pass.
+                // Имена здесь берутся из конфигурации: endpoint с результатами их не несёт,
+                // а требование задать их в конфиге — это то, что оставляет нам один вызов на проход.
                 environment.projectName(),
                 null,
                 environment.environmentName(),

@@ -5,9 +5,9 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Branch-derived pull request titles repeat what the card already shows: the date,
- * and the issue key that is about to go in brackets. These are the real titles from
- * the repositories this mirrors.
+ * Заголовки пул-реквестов, выведенные из имён веток, повторяют то, что и так есть на
+ * карточке: дату и ключ задачи, который вот-вот встанет в скобки. Здесь взяты настоящие
+ * заголовки из репозиториев, которые мы зеркалим.
  */
 class PrCardContentRendererTest {
 
@@ -57,7 +57,7 @@ class PrCardContentRendererTest {
 
     @Test
     void keepsTheOriginalWhenStrippingWouldLeaveNothing() {
-        // A title that is only a date and a key would otherwise produce a nameless card.
+        // Заголовок из одной только даты и ключа иначе дал бы карточку без имени.
         assertThat(PrCardContentRenderer.cleanTitle("2026 08 19 ORVD-1047", "ORVD-1047"))
                 .isEqualTo("2026 08 19 ORVD-1047");
     }

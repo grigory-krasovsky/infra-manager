@@ -24,8 +24,8 @@ class IssueKeyExtractorTest {
 
     @Test
     void prefersTheBranchOverTheTitle() {
-        // A title can mention an unrelated ticket in passing; the branch name is the
-        // more deliberate statement of what the work is.
+        // В заголовке между делом может упоминаться посторонний тикет; имя ветки —
+        // более осознанное высказывание о том, что за работа.
         assertThat(extractor.extract("feature/PROJ-1-real", "Follow-up to PROJ-999"))
                 .contains("PROJ-1");
     }

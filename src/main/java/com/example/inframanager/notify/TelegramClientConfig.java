@@ -13,9 +13,9 @@ import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Wires the Telegram client explicitly rather than through {@code @ImportHttpServices}
- * groups: each integration in this service has its own base URL and its own auth
- * scheme, so there is no shared group to configure.
+ * Собирает клиент Telegram явно, а не через группы {@code @ImportHttpServices}: у каждой
+ * интеграции в этом сервисе свой базовый URL и своя схема аутентификации, так что общей
+ * группы, которую можно было бы настроить, попросту нет.
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "infra-manager.telegram", name = "enabled", havingValue = "true")
@@ -25,8 +25,8 @@ public class TelegramClientConfig {
 
     public TelegramClientConfig(TelegramProperties properties) {
         if (!StringUtils.hasText(properties.botToken())) {
-            // Fail at startup rather than at the first deployment, when a missing
-            // notification is the thing nobody notices.
+            // Падаем на старте, а не на первом же деплое, когда отсутствие уведомления —
+            // ровно то, чего никто не замечает.
             throw new IllegalStateException(
                     "infra-manager.telegram.enabled=true but no bot token set (TELEGRAM_BOT_TOKEN)");
         }

@@ -1,11 +1,11 @@
 package com.example.inframanager.outbound;
 
-/** External APIs we push to. */
+/** Внешние API, в которые мы пишем. */
 public enum OutboundTarget {
 
-    /** Cards on the mirror board. */
+    /** Карточки на доске-зеркале. */
     TRELLO,
 
-    /** Deployment notifications. */
+    /** Уведомления о деплое. */
     TELEGRAM
 }

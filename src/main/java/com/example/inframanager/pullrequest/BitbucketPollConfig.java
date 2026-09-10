@@ -22,7 +22,7 @@ import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Everything the pull request polling path needs, present only when
+ * Всё, что нужно пути с опросом пул-реквестов; поднимается, только когда
  * {@code infra-manager.bitbucket.poll.enabled=true}.
  */
 @Configuration(proxyBeanMethods = false)
@@ -64,7 +64,7 @@ public class BitbucketPollConfig implements SchedulingConfigurer {
 
         RestClient restClient = builder
                 .baseUrl(properties.baseUrl())
-                // Data Center HTTP access tokens authenticate as bearer tokens.
+                // HTTP access token'ы Data Center аутентифицируются как bearer-токены.
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.token())
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .requestFactory(requestFactory)
@@ -90,7 +90,7 @@ public class BitbucketPollConfig implements SchedulingConfigurer {
         if (!workerProperties.schedulingEnabled()) {
             return;
         }
-        // Through a provider because the poller is a @Bean of this same class.
+        // Через provider, потому что поллер — это @Bean этого же класса.
         registrar.addFixedDelayTask(() -> poller.getObject().runOnce(), properties.poll().interval());
         log.info("Bitbucket polling scheduled every {} for {} repository(ies)",
                 properties.poll().interval(), lifecycle.repos().size());

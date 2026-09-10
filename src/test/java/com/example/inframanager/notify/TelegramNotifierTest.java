@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
         "infra-manager.workers.scheduling-enabled=false",
-        // Two routes: one only cares about PROD, the other about every stand.
+        // Два маршрута: одному интересен только PROD, другому — все стенды.
         "infra-manager.telegram.routes[0].chat-id=-100prod",
         "infra-manager.telegram.routes[0].environments[0]=PROD",
         "infra-manager.telegram.routes[1].chat-id=-100all"
@@ -70,7 +70,7 @@ class TelegramNotifierTest {
 
     @Test
     void withTelegramDisabledTasksAreSkippedRatherThanSilentlyDropped() {
-        // infra-manager.telegram.enabled defaults to false, so no sender is registered.
+        // infra-manager.telegram.enabled по умолчанию false, поэтому отправитель не зарегистрирован.
         notifier.notify("PROD", "deploy:104", "INFRA deployed to PROD");
 
         worker.runOnce();

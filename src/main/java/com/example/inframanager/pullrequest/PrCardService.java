@@ -19,11 +19,12 @@ import org.springframework.util.StringUtils;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Turns a stored Bitbucket pull request event into a queued Trello card update.
+ * Превращает сохранённое событие пул-реквеста Bitbucket в поставленное в очередь
+ * обновление карточки Trello.
  *
- * <p>Decides <em>what the card should look like</em> and hands that to the queue;
- * it never calls Trello itself. That keeps the inbound worker fast and puts every
- * Trello call behind one rate limiter.
+ * <p>Решает, <em>как должна выглядеть карточка</em>, и отдаёт это в очередь; сам в Trello
+ * никогда не ходит. Так входящий воркер остаётся быстрым, а все вызовы Trello проходят
+ * через один ограничитель скорости.
  */
 @Component
 public class PrCardService implements InboundEventHandler {
@@ -63,7 +64,7 @@ public class PrCardService implements InboundEventHandler {
 
         Optional<PullRequestRef> maybeRef = parsed.ref();
         if (maybeRef.isEmpty()) {
-            // Not retryable: no amount of waiting adds a repository to the payload.
+            // Повторять бессмысленно: сколько ни жди, репозиторий в payload'е не появится.
             throw new IllegalArgumentException(
                     "Bitbucket payload has no target repository; cannot identify the pull request");
         }
@@ -71,7 +72,7 @@ public class PrCardService implements InboundEventHandler {
 
         Optional<LifecycleProperties.RepoBoard> board = lifecycle.boardFor(ref);
         if (board.isEmpty()) {
-            // Expected whenever the webhook is enabled on more repos than we mirror.
+            // Ожидаемо, когда вебхук включён на большем числе репозиториев, чем мы зеркалим.
             log.debug("No Trello board configured for {}; ignoring {}", ref.asKey(), event.getEventType());
             return;
         }
@@ -83,7 +84,7 @@ public class PrCardService implements InboundEventHandler {
                 .extract(parsed.sourceBranch(),
                         parsed.pullRequest() == null ? null : parsed.pullRequest().title())
                 .orElse(null);
-        // Never throws: a card with a plainer title beats no card at all.
+        // Никогда не бросает исключение: карточка с более скупым заголовком лучше, чем её отсутствие.
         String issueSummary = jiraEnricher.summaryFor(issueKey).orElse(null);
 
         TrelloCardCommand command = new TrelloCardCommand(
@@ -98,8 +99,8 @@ public class PrCardService implements InboundEventHandler {
                 authorCandidates(parsed),
                 archive);
 
-        // Keyed on the inbound event, so replaying that event does not queue a second
-        // identical card update.
+        // Ключуется по входящему событию, поэтому его повтор не поставит в очередь
+        // второе такое же обновление карточки.
         String dedupKey = "trello:%s:%s".formatted(ref.asKey(), event.getExternalId());
         taskService.enqueue(OutboundTarget.TRELLO, "syncCard", dedupKey,
                 objectMapper.writeValueAsString(command));
@@ -109,10 +110,10 @@ public class PrCardService implements InboundEventHandler {
     }
 
     /**
-     * Where the change is headed. Only that: the repository is already the title's
-     * prefix, and the author is a card member rather than a label -- an avatar reads
-     * faster than a coloured chip, and Trello's ten-colour palette runs out of
-     * distinct colours long before a team does.
+     * Куда направлено изменение. Только это: репозиторий уже стоит префиксом в заголовке,
+     * а автор — участник карточки, а не метка: аватар считывается быстрее цветной плашки,
+     * да и десяти цветов палитры Trello перестаёт хватать задолго до того, как кончится
+     * команда.
      */
     private List<String> labelsFor(BitbucketPrEvent event) {
         List<String> labels = new ArrayList<>();
@@ -122,7 +123,7 @@ public class PrCardService implements InboundEventHandler {
         return labels;
     }
 
-    /** Login first, then display name: the login is the less ambiguous of the two. */
+    /** Сначала логин, потом отображаемое имя: логин из двух менее двусмысленный. */
     private List<String> authorCandidates(BitbucketPrEvent event) {
         List<String> candidates = new ArrayList<>();
         if (StringUtils.hasText(event.authorLogin())) {

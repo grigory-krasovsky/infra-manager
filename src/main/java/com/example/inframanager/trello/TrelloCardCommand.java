@@ -4,12 +4,12 @@ import com.example.inframanager.pullrequest.PullRequestRef;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
- * What gets stored in {@code outbound_task.payload} for a TRELLO task: the desired
- * state of one card, not a step to perform.
+ * То, что лежит в {@code outbound_task.payload} для задачи TRELLO: желаемое состояние
+ * одной карточки, а не шаг, который надо выполнить.
  *
- * <p>Declaring the target state rather than "create" or "move" makes the task safe
- * to replay and safe to process out of order -- applying it twice lands on the same
- * card in the same list.
+ * <p>Описание целевого состояния вместо «создать» или «переместить» делает задачу
+ * безопасной для повтора и для обработки не по порядку — применив её дважды, получим
+ * ту же карточку в том же списке.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record TrelloCardCommand(
@@ -18,29 +18,30 @@ public record TrelloCardCommand(
 
         String boardId,
 
-        /** Null means leave the card where it is and only refresh its content. */
+        /** Null означает «оставить карточку на месте и лишь обновить её содержимое». */
         String moveToListName,
 
-        /** Where a card goes when it does not exist yet. Never null. */
+        /** Куда попадает карточка, которой ещё нет. Никогда не null. */
         String createInListName,
 
         String title,
 
         String description,
 
-        /** Recorded on the link when known; null when the branch carries no key. */
+        /** Записывается в связку, когда известен; null, если в ветке нет ключа. */
         String issueKey,
 
         /**
-         * Label names, created on the board if absent. Null leaves whatever labels
-         * the card already has alone -- which is what reconciliation wants.
+         * Имена меток; отсутствующие создаются на доске. Null оставляет метки карточки
+         * как есть — именно этого хочет сверка.
          */
         java.util.List<String> labels,
 
         /**
-         * Identifiers of the author, most specific first. Matched against existing
-         * board members; unlike labels, members cannot be created, so an author with
-         * no Trello account simply leaves the card unassigned.
+         * Идентификаторы автора, от наиболее точного к менее точному. Сопоставляются
+         * с существующими участниками доски; в отличие от меток, участников создать
+         * нельзя, поэтому автор без учётной записи в Trello просто оставляет карточку
+         * без исполнителя.
          */
         java.util.List<String> memberCandidates,
 

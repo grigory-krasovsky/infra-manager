@@ -14,13 +14,13 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Sends exactly one task per transaction.
+ * Отправляет ровно одну задачу за транзакцию.
  *
- * <p>The row lock is held across the HTTP call. At our volumes that costs nothing
- * and it is what keeps a second worker from sending the same message. Delivery is
- * at-least-once: a crash between a successful send and the commit re-sends. The
- * alternative -- marking sent before sending -- loses messages instead, which is
- * worse for a deployment notification.
+ * <p>Блокировка строки удерживается на всё время HTTP-вызова. На наших объёмах это
+ * ничего не стоит и именно это не даёт второму воркеру отправить то же сообщение.
+ * Доставка — «хотя бы один раз»: падение между успешной отправкой и коммитом приведёт
+ * к повторной отправке. Альтернатива — помечать отправленным до отправки — вместо
+ * этого теряет сообщения, а для уведомления о деплое это хуже.
  */
 @Component
 public class OutboundTaskProcessor {
@@ -35,7 +35,7 @@ public class OutboundTaskProcessor {
     public OutboundTaskProcessor(OutboundTaskRepository repository,
                                  List<OutboundTaskSender> senders,
                                  WorkerProperties properties) {
-        // One sender per target, for the same reason handlers are one per source.
+        // По одному отправителю на цель — по той же причине, по какой обработчик один на источник.
         for (OutboundTarget target : OutboundTarget.values()) {
             List<OutboundTaskSender> claiming = senders.stream().filter(s -> s.target() == target).toList();
             if (claiming.size() > 1) {
@@ -48,7 +48,7 @@ public class OutboundTaskProcessor {
         this.settings = properties.outbound();
     }
 
-    /** @return true if this call took ownership of the row */
+    /** @return true, если этот вызов забрал строку в работу */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean processOne(long id) {
         OutboundTask task = repository.lockClaimable(id).orElse(null);
@@ -78,8 +78,8 @@ public class OutboundTaskProcessor {
             task.setLastError(null);
             task.setCompletedAt(Instant.now());
         } catch (RetryAfterException e) {
-            // Not counted as a real attempt: the API refused to look at the request
-            // at all, so burning the retry budget on it would drop valid messages.
+            // Не считается настоящей попыткой: API вообще отказался смотреть на запрос,
+            // и потратить на это бюджет повторов — значит потерять корректные сообщения.
             task.setAttempts(task.getAttempts() - 1);
             task.setLastError(String.valueOf(e));
             task.setNextAttemptAt(Instant.now().plus(e.getRetryAfter()));

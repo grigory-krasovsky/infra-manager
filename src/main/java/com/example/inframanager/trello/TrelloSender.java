@@ -15,18 +15,18 @@ import org.springframework.web.client.HttpClientErrorException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Performs TRELLO outbound tasks: creates the card if it does not exist yet, then
- * brings it to the state the command asks for.
+ * Выполняет исходящие задачи TRELLO: создаёт карточку, если её ещё нет, и приводит её
+ * в состояние, которого требует команда.
  *
- * <p>Runs inside the outbound worker's transaction, so the card id Trello returns
- * and the {@code pr_card_link} row that records it are committed together. Losing
- * that association would mean creating a duplicate card on the next event.
+ * <p>Работает внутри транзакции исходящего воркера, поэтому id карточки, который вернул
+ * Trello, и строка {@code pr_card_link} с этой записью коммитятся вместе. Потеря этой
+ * связи означала бы создание карточки-дубликата на следующем событии.
  */
 public class TrelloSender implements OutboundTaskSender {
 
     private static final Logger log = LoggerFactory.getLogger(TrelloSender.class);
 
-    /** Trello does not send Retry-After; its window is measured in seconds. */
+    /** Trello не присылает Retry-After; его окно измеряется секундами. */
     private static final Duration RATE_LIMIT_BACKOFF = Duration.ofSeconds(10);
 
     private final TrelloClient client;
@@ -81,7 +81,7 @@ public class TrelloSender implements OutboundTaskSender {
 
     private void createCard(TrelloCardCommand command, PrCardLink link) {
         if (command.archive()) {
-            // Nothing to archive: the PR was deleted before we ever mirrored it.
+            // Архивировать нечего: PR удалили раньше, чем мы успели его отзеркалить.
             log.debug("Skipping archive for {} -- no card was ever created", command.pullRequest().asKey());
             return;
         }
@@ -98,7 +98,7 @@ public class TrelloSender implements OutboundTaskSender {
     }
 
     /**
-     * @return comma-separated label ids, or null to leave the card's labels untouched
+     * @return id меток через запятую либо null — не трогать метки карточки
      */
     private String labelIds(TrelloCardCommand command) {
         if (command.labels() == null || command.labels().isEmpty()) {
@@ -109,8 +109,8 @@ public class TrelloSender implements OutboundTaskSender {
     }
 
     /**
-     * @return comma-separated member ids, or null to leave the card's members alone.
-     *         An author with no Trello account resolves to nothing, which is expected.
+     * @return id участников через запятую либо null — не трогать участников карточки.
+     *         Автор без учётной записи в Trello не разрешается ни во что, и это нормально.
      */
     private String memberIds(TrelloCardCommand command) {
         if (command.memberCandidates() == null || command.memberCandidates().isEmpty()) {

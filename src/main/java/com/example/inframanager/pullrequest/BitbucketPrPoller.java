@@ -16,17 +16,17 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Recovers pull request events by polling, for installations where Bitbucket cannot
- * reach us.
+ * Восстанавливает события пул-реквестов опросом — для установок, где Bitbucket не может
+ * достучаться до нас.
  *
- * <p>A webhook says what happened. Polling shows only the present, so the event is
- * reconstructed by comparing each pull request against {@link PrPollState}. The
- * result is written in exactly the shape a webhook body has, which means everything
- * downstream -- {@link PrCardService}, the card lifecycle, idempotency -- is shared
- * between the two ingestion paths rather than duplicated.
+ * <p>Вебхук сообщает, что произошло. Поллинг же показывает только настоящее, поэтому
+ * событие реконструируется сравнением каждого пул-реквеста с {@link PrPollState}.
+ * Результат записывается ровно в той форме, которую имеет тело вебхука, — благодаря
+ * этому всё, что дальше по цепочке ({@link PrCardService}, жизненный цикл карточки,
+ * идемпотентность), общее для обоих путей приёма, а не продублировано.
  *
- * <p>Only repositories listed in {@code infra-manager.lifecycle.repos} are polled:
- * events from a repository we do not mirror would have nobody to act on them.
+ * <p>Опрашиваются только репозитории из {@code infra-manager.lifecycle.repos}: события
+ * репозитория, который мы не зеркалим, некому обрабатывать.
  */
 public class BitbucketPrPoller {
 
@@ -53,7 +53,7 @@ public class BitbucketPrPoller {
         this.objectMapper = objectMapper;
     }
 
-    /** @return how many events this pass reconstructed */
+    /** @return сколько событий восстановил этот проход */
     @Transactional
     public int runOnce() {
         int emitted = 0;
@@ -61,11 +61,11 @@ public class BitbucketPrPoller {
             try {
                 emitted += pollRepository(repo);
             } catch (DataAccessException e) {
-                // A database failure has already marked this transaction rollback-only;
-                // swallowing it would surface later as an unexplained UnexpectedRollback.
+                // Сбой базы уже пометил транзакцию как rollback-only; проглотив его,
+                // мы получили бы позже необъяснимый UnexpectedRollback.
                 throw e;
             } catch (Exception e) {
-                // One unreachable repository must not stop the others.
+                // Один недоступный репозиторий не должен останавливать остальные.
                 log.warn("Failed to poll {}/{}", repo.projectKey(), repo.repoSlug(), e);
             }
         }
@@ -94,8 +94,8 @@ public class BitbucketPrPoller {
         PrPollState previous = stateRepository.find(ref).orElse(null);
         String eventKey = deriveEvent(previous, snapshot);
 
-        // Populate before saving: the id is IDENTITY-generated, so save() inserts
-        // immediately and a not-yet-observed row would violate NOT NULL on state.
+        // Заполняем до сохранения: id генерируется через IDENTITY, поэтому save() вставляет
+        // строку сразу, а ещё не наблюдённая строка нарушила бы NOT NULL на state.
         PrPollState state = previous != null ? previous : new PrPollState(ref);
         state.observe(pullRequest.state(), pullRequest.version(),
                 snapshot.latestCommit(), snapshot.reviewerDigest());
@@ -117,13 +117,14 @@ public class BitbucketPrPoller {
     }
 
     /**
-     * Works out what changed since the last pass.
+     * Выясняет, что изменилось с прошлого прохода.
      *
-     * <p>A pull request seen for the first time only produces an event if it is still
-     * open. Otherwise the first poll of a busy repository would announce every merge
-     * in its history.
+     * <p>Пул-реквест, увиденный впервые, порождает событие, только если он всё ещё
+     * открыт. Иначе первый же опрос активного репозитория объявил бы о каждом мерже
+     * в его истории.
      *
-     * @return the Bitbucket event key to raise, or null when nothing worth acting on changed
+     * @return ключ события Bitbucket, который надо поднять, или null, если ничего
+     *         заслуживающего реакции не изменилось
      */
     private String deriveEvent(PrPollState previous, BitbucketPrEvent snapshot) {
         String state = snapshot.state();
@@ -132,9 +133,9 @@ public class BitbucketPrPoller {
             if (!"OPEN".equalsIgnoreCase(state)) {
                 return null;
             }
-            // Not blindly pr:opened: an open pull request already has a review status,
-            // and reporting it as freshly opened would drop a card that is sitting in
-            // "changes requested" back into the review column.
+            // Не слепо pr:opened: у открытого пул-реквеста уже есть статус ревью, и объявить
+            // его только что открытым — значит вернуть карточку, лежащую в «нужны правки»,
+            // обратно в колонку ревью.
             return currentReviewEvent(snapshot);
         }
 
@@ -146,12 +147,12 @@ public class BitbucketPrPoller {
                 return "pr:declined";
             }
             if ("OPEN".equalsIgnoreCase(state)) {
-                // Reopened after being declined.
+                // Переоткрыт после отклонения.
                 return "pr:opened";
             }
         }
 
-        // New commits outrank a review change: pushing invalidates the review anyway.
+        // Новые коммиты важнее смены статуса ревью: пуш всё равно обесценивает ревью.
         if (changed(previous.getLatestCommit(), snapshot.latestCommit())) {
             return "pr:from_ref_updated";
         }
@@ -171,8 +172,8 @@ public class BitbucketPrPoller {
     }
 
     /**
-     * The list endpoint may omit the repository on a ref; the card is keyed on it, so
-     * it is filled in from configuration rather than left to fail downstream.
+     * Endpoint со списком может не прислать репозиторий в ref'е; карточка ключуется по
+     * нему, поэтому подставляем его из конфигурации, а не роняем обработку дальше по цепочке.
      */
     private BitbucketPrEvent.PullRequest withRepository(BitbucketPrEvent.PullRequest pullRequest,
                                                         LifecycleProperties.RepoBoard repo) {
@@ -191,7 +192,7 @@ public class BitbucketPrPoller {
                 pullRequest.author(), pullRequest.reviewers(), pullRequest.links());
     }
 
-    /** Identifies the state transition, so re-polling an unchanged pull request is a duplicate. */
+    /** Идентифицирует переход состояния: повторный опрос неизменившегося пул-реквеста даёт дубликат. */
     private String externalId(PullRequestRef ref, String eventKey, BitbucketPrEvent snapshot,
                               BitbucketPrEvent.PullRequest pullRequest) {
         String fingerprint = String.join("|", ref.asKey(), eventKey,
@@ -200,7 +201,7 @@ public class BitbucketPrPoller {
         return "poll:" + sha256(fingerprint);
     }
 
-    /** Where an open pull request belongs right now, judged only by its reviewers. */
+    /** Где открытому пул-реквесту место прямо сейчас — судя только по его ревьюерам. */
     private String currentReviewEvent(BitbucketPrEvent snapshot) {
         if (snapshot.hasChangesRequested()) {
             return "pr:reviewer:changes_requested";

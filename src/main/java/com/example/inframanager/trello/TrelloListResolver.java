@@ -13,11 +13,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Translates the list names used in configuration into the opaque ids Trello wants.
+ * Переводит имена списков из конфигурации в непрозрачные id, которых требует Trello.
  *
- * <p>Cached because every card move would otherwise cost an extra call against a
- * rate-limited API, and boards change shape rarely. A miss refetches, so renaming a
- * column is picked up without a restart once the entry expires.
+ * <p>Кешируется, потому что иначе каждое перемещение карточки стоило бы лишнего вызова
+ * к API с лимитом запросов, а форма досок меняется редко. Промах приводит к повторному
+ * запросу, так что переименование колонки подхватывается без перезапуска — как только
+ * запись протухнет.
  */
 public class TrelloListResolver {
 
@@ -33,15 +34,15 @@ public class TrelloListResolver {
     }
 
     /**
-     * @throws IllegalStateException if the board has no such list -- a configuration
-     *                               error, surfaced rather than silently ignored
+     * @throws IllegalStateException если на доске нет такого списка — это ошибка
+     *                               конфигурации, и о ней сообщается, а не молчится
      */
     public String listId(String boardId, String listName) {
         String id = lookup(boardId, listName, false);
         if (id != null) {
             return id;
         }
-        // Could be a stale cache after someone renamed or added a column.
+        // Возможно, кеш устарел после того, как колонку переименовали или добавили.
         id = lookup(boardId, listName, true);
         if (id != null) {
             return id;
@@ -49,7 +50,7 @@ public class TrelloListResolver {
         throw new IllegalStateException("Trello board %s has no list named '%s'".formatted(boardId, listName));
     }
 
-    /** Reverse direction, for reporting drift in terms a human recognises. */
+    /** Обратное направление — чтобы сообщать о расхождении понятными человеку словами. */
     public Optional<String> listName(String boardId, String listId) {
         if (listId == null) {
             return Optional.empty();
@@ -84,11 +85,11 @@ public class TrelloListResolver {
                 .collect(Collectors.toMap(
                         list -> normalise(list.name()),
                         TrelloClient.TrelloList::id,
-                        // Two columns with the same name: keep the first, it is the
-                        // leftmost and the more likely intent.
+                        // Две колонки с одинаковым именем: оставляем первую — она левее,
+                        // и её, скорее всего, и имели в виду.
                         (first, second) -> first));
-        // Kept separately so lookups can be case-insensitive while anything shown to
-        // a human still uses the board's actual capitalisation.
+        // Хранится отдельно, чтобы поиск был нечувствителен к регистру, а всё показываемое
+        // человеку сохраняло написание, принятое на доске.
         Map<String, String> byId = safe.stream()
                 .collect(Collectors.toMap(
                         TrelloClient.TrelloList::id,
@@ -99,7 +100,7 @@ public class TrelloListResolver {
         return new CachedBoard(byName, byId, Instant.now());
     }
 
-    /** List names are typed by hand in two places; do not let case or padding matter. */
+    /** Имена списков набираются руками в двух местах; регистр и пробелы не должны иметь значения. */
     private static String normalise(String name) {
         return name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
     }

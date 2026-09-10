@@ -12,11 +12,11 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Turns a stored Bamboo delivery into a deployment record and, once the deployment
- * has actually finished, a Telegram announcement.
+ * Превращает сохранённую доставку от Bamboo в запись о деплое, а когда деплой
+ * действительно завершился — в объявление в Telegram.
  *
- * <p>Runs inside the inbound worker's transaction, so recording the deployment,
- * marking it announced, and queueing the message either all happen or none do.
+ * <p>Работает внутри транзакции входящего воркера, поэтому запись о деплое, отметка
+ * «объявлено» и постановка сообщения в очередь происходят либо все, либо ни одна.
  */
 @Component
 public class DeploymentEventHandler implements InboundEventHandler {
@@ -51,8 +51,8 @@ public class DeploymentEventHandler implements InboundEventHandler {
         BambooDeploymentEvent parsed = resolveProjectName(
                 objectMapper.readValue(event.getPayload(), BambooDeploymentEvent.class));
         if (parsed.deploymentResultId() == null) {
-            // Unrecoverable: retrying cannot add a field. Let it exhaust and land in
-            // FAILED, where the bad payload stays visible next to the error.
+            // Неисправимо: повтор не добавит поле. Пусть исчерпает попытки и осядет в
+            // FAILED, где плохой payload останется на виду рядом с ошибкой.
             throw new IllegalArgumentException(
                     "Bamboo payload has no deploymentResultId; check the webhook template");
         }
@@ -71,8 +71,8 @@ public class DeploymentEventHandler implements InboundEventHandler {
             return;
         }
         if (isTooOldToAnnounce(parsed)) {
-            // Marked notified so a later observation of the same deployment does not
-            // resurrect it once it is no longer being compared against the clock.
+            // Помечаем объявленным, чтобы более позднее наблюдение того же деплоя не
+            // воскресило его, когда сравнивать с часами уже перестанут.
             log.info("Deployment {} of {} to {} finished at {}; too old to announce",
                     parsed.deploymentResultId(), record.getProjectName(),
                     record.getEnvironmentName(), parsed.finishedInstant());
@@ -91,9 +91,9 @@ public class DeploymentEventHandler implements InboundEventHandler {
     }
 
     /**
-     * A deployment with no finish time is announced: that only happens on webhook
-     * payloads, which arrive as the deployment ends, and staying silent about a real
-     * deployment is the worse failure.
+     * Деплой без времени завершения объявляется: так бывает только у payload'ов вебхука,
+     * которые приходят в момент окончания деплоя, а промолчать о настоящем деплое — сбой
+     * похуже.
      */
     private boolean isTooOldToAnnounce(BambooDeploymentEvent event) {
         Instant finished = event.finishedInstant();
@@ -102,8 +102,8 @@ public class DeploymentEventHandler implements InboundEventHandler {
     }
 
     /**
-     * Fills in the project name from configuration when the payload carries only an
-     * id, which is the case for Bamboo webhook templates that do not expose the name.
+     * Подставляет имя проекта из конфигурации, когда payload несёт только id, — так
+     * ведут себя шаблоны вебхуков Bamboo, которые имя не отдают.
      */
     private BambooDeploymentEvent resolveProjectName(BambooDeploymentEvent event) {
         if (event.hasProjectName() || event.deploymentProjectId() == null) {

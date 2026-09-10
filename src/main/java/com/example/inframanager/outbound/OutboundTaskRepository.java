@@ -11,13 +11,13 @@ import org.springframework.data.repository.query.Param;
 public interface OutboundTaskRepository extends JpaRepository<OutboundTask, Long> {
 
     /**
-     * Enqueues unless an identical task is already queued.
+     * Ставит в очередь, если такой же задачи там ещё нет.
      *
-     * <p>Same reasoning as on the inbound side: a duplicate is expected traffic, so
-     * it is resolved in SQL rather than by catching a constraint violation that
-     * would poison the transaction.
+     * <p>Рассуждение то же, что и на входящей стороне: дубликат — ожидаемый трафик,
+     * поэтому он разрешается средствами SQL, а не перехватом нарушения ограничения,
+     * которое отравило бы транзакцию.
      *
-     * @return 1 when a row was created, 0 when it was already queued
+     * @return 1, если строка создана, 0 — если задача уже была в очереди
      */
     @Modifying
     @Query(value = """

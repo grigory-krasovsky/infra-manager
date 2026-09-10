@@ -1,12 +1,12 @@
 package com.example.inframanager.outbound;
 
 /**
- * Performs the actual API call for one target. Telegram arrives in phase 2,
- * Trello in phase 4.
+ * Выполняет собственно вызов API для одной цели. Реализации появляются вместе со
+ * своими фазами: Telegram в фазе 2, Trello в фазе 4.
  *
- * <p>Throwing signals a retryable failure. Throw
- * {@link com.example.inframanager.work.RetryAfterException} when the API returned
- * 429 so the worker waits the interval the API asked for rather than guessing.
+ * <p>Исключение означает сбой, который имеет смысл повторить. Если API вернул 429,
+ * бросайте {@link com.example.inframanager.work.RetryAfterException}, чтобы воркер
+ * выждал именно тот интервал, который запросил API, а не гадал.
  */
 public interface OutboundTaskSender {
 

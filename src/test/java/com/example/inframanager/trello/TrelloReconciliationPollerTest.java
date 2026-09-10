@@ -25,8 +25,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
- * Drift detection against a mocked Trello. The behaviour under test is what happens
- * to our own state, so the HTTP layer is not the interesting part here.
+ * Обнаружение расхождений на подменённом Trello. Проверяется поведение нашего
+ * собственного состояния, так что HTTP-слой здесь не самое интересное.
  */
 @SpringBootTest(properties = {
         "infra-manager.workers.scheduling-enabled=false",
@@ -81,13 +81,13 @@ class TrelloReconciliationPollerTest {
 
         assertThat(poller.runOnce()).isEqualTo(1);
 
-        // Postgres re-renders jsonb with its own spacing, so match on values.
+        // Postgres перерисовывает jsonb со своими пробелами, поэтому сверяемся по значениям.
         String payload = jdbc.queryForObject(
                 "SELECT payload->>'moveToListName' FROM outbound_task LIMIT 1", String.class);
-        // The board's own capitalisation, not the lower-cased lookup key.
+        // Написание, принятое на доске, а не приведённый к нижнему регистру ключ поиска.
         assertThat(payload).isEqualTo("Review");
 
-        // Content is left alone: this is a move, not a rewrite.
+        // Содержимое не трогаем: это перемещение, а не переписывание.
         assertThat(jdbc.queryForObject("SELECT payload->>'title' FROM outbound_task LIMIT 1", String.class))
                 .isNull();
     }

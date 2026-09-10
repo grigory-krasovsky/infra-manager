@@ -38,12 +38,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The phase 4 acceptance path end to end: Bitbucket posts a pull request event and a
- * Trello card is created, then moved, with the association remembered in between.
+ * Приёмочный путь фазы 4 от начала до конца: Bitbucket постит событие пул-реквеста,
+ * карточка Trello создаётся, затем перемещается, а связь между ними в промежутке
+ * помнится.
  *
- * <p>Trello itself is mocked at the client interface rather than over HTTP -- the
- * HTTP shape is covered by the client's own contract, and what matters here is which
- * card operations the lifecycle decides on.
+ * <p>Сам Trello подменяется на уровне интерфейса клиента, а не по HTTP: форма HTTP
+ * покрыта контрактом самого клиента, а здесь важно, какие операции с карточкой выбирает
+ * жизненный цикл.
  */
 @SpringBootTest(properties = {
         "infra-manager.workers.scheduling-enabled=false",
@@ -60,8 +61,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "infra-manager.lifecycle.repos[0].repo-slug=backend",
         "infra-manager.lifecycle.repos[0].trello-board-id=board-1",
         "infra-manager.lifecycle.repos[0].prefix=BACK",
-        // Declared here rather than inherited from application.yaml: column names are
-        // whatever a given board happens to use, and renaming one must not break tests.
+        // Объявлено здесь, а не унаследовано из application.yaml: имена колонок —
+        // это то, что оказалось на конкретной доске, и переименование не должно ломать тесты.
         "infra-manager.lifecycle.event-to-list[0].event=pr:opened",
         "infra-manager.lifecycle.event-to-list[0].list=Review",
         "infra-manager.lifecycle.event-to-list[1].event=pr:reviewer:approved",
@@ -290,7 +291,7 @@ class BitbucketPrFlowTest {
         ArgumentCaptor<TrelloClient.CreateCardRequest> request =
                 ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
         verify(trelloClient).createCard(anyString(), anyString(), request.capture());
-        // The key is still known from the branch, only the summary is missing.
+        // Ключ по-прежнему известен из ветки, не хватает только summary.
         assertThat(request.getValue().name()).isEqualTo("BACK · [PROJ-101] fix stuff");
         assertThat(inboundEvents.findAll())
                 .allSatisfy(e -> assertThat(e.getStatus()).isEqualTo(ProcessingStatus.DONE));

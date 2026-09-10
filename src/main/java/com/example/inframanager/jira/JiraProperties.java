@@ -8,30 +8,30 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("infra-manager.jira")
 public record JiraProperties(
 
-        /** Purely cosmetic: with it off, cards are titled from the pull request alone. */
+        /** Чистая косметика: при выключенной Jira карточки озаглавливаются только по пул-реквесту. */
         @DefaultValue("false") boolean enabled,
 
         @DefaultValue("") String baseUrl,
 
-        /** Data Center personal access token, sent as a bearer token. */
+        /** Personal access token Data Center, отправляется как bearer-токен. */
         @DefaultValue("") String token,
 
         /**
-         * Deliberately short. This call happens while the inbound worker holds a row
-         * lock, and a slow Jira must not stall pull request events -- a missing
-         * summary is a much smaller problem than a stuck queue.
+         * Намеренно короткий. Этот вызов происходит, пока входящий воркер держит
+         * блокировку строки, и медленная Jira не должна тормозить события пул-реквестов:
+         * отсутствующее summary — куда меньшая беда, чем вставшая очередь.
          */
         @DefaultValue("2s") Duration connectTimeout,
 
         @DefaultValue("3s") Duration readTimeout,
 
-        /** How long a fetched summary is reused before asking Jira again. */
+        /** Сколько полученное summary переиспользуется, прежде чем спросить Jira снова. */
         @DefaultValue("1h") Duration cacheTtl,
 
         /**
-         * Matches issue keys in branch names and pull request titles. The default is
-         * the standard Atlassian shape; tighten it to your project keys if branch
-         * names contain other things that look like keys.
+         * Отлавливает ключи задач в именах веток и заголовках пул-реквестов. По умолчанию —
+         * стандартная форма Atlassian; ужмите под ключи своих проектов, если в именах веток
+         * встречается что-то ещё, похожее на ключ.
          */
         @DefaultValue("([A-Z][A-Z0-9]+-\\d+)") String issueKeyPattern) {
 }

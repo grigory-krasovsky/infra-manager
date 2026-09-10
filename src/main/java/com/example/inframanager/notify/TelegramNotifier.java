@@ -8,12 +8,12 @@ import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Fans one notification out to every configured chat that cares about the
- * environment, queueing a task per chat.
+ * Разносит одно уведомление по всем настроенным чатам, которым интересно это окружение,
+ * ставя в очередь по задаче на чат.
  *
- * <p>Registered whether or not Telegram is enabled: with it disabled the tasks
- * still get queued and then marked SKIPPED, which leaves the misconfiguration
- * visible in {@code outbound_task} rather than silently dropping notifications.
+ * <p>Регистрируется независимо от того, включён ли Telegram: при выключенном задачи всё
+ * равно попадают в очередь и затем помечаются SKIPPED, так что ошибка настройки видна
+ * в {@code outbound_task}, а не приводит к молчаливой потере уведомлений.
  */
 @Service
 public class TelegramNotifier {
@@ -33,11 +33,11 @@ public class TelegramNotifier {
     }
 
     /**
-     * @param environment the stand this concerns; routes filter on it
-     * @param dedupKeyBase must identify the underlying fact (e.g. a deployment result
-     *                     id), not the moment of sending, so reprocessing the source
-     *                     event does not send a second copy
-     * @return how many chats the message was newly queued for
+     * @param environment стенд, о котором речь; маршруты фильтруют именно по нему
+     * @param dedupKeyBase должен опознавать сам факт (например, id результата деплоя),
+     *                     а не момент отправки, чтобы повторная обработка исходного
+     *                     события не отправила вторую копию
+     * @return для скольких чатов сообщение впервые поставлено в очередь
      */
     public int notify(String environment, String dedupKeyBase, String text) {
         if (properties.routes().isEmpty()) {

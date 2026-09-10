@@ -7,14 +7,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * Backs integration tests with the same Postgres image docker-compose runs, so
- * Flyway migrations are exercised against the real target version rather than an
- * in-memory stand-in.
+ * Подкладывает интеграционным тестам тот же образ Postgres, что запускает
+ * docker-compose, чтобы миграции Flyway проверялись на реальной целевой версии, а не на
+ * in-memory-подделке.
  */
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfiguration {
 
-    /** Must match the image tag in docker-compose.yml. */
+    /** Должен совпадать с тегом образа в docker-compose.yml. */
     public static final DockerImageName POSTGRES_IMAGE = DockerImageName.parse("postgres:17-alpine");
 
     @Bean

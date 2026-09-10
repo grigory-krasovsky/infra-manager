@@ -19,8 +19,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
- * The polling path has to reconstruct events that a webhook would have stated
- * outright, so what matters is which event key comes out of each transition.
+ * Путь с опросом вынужден восстанавливать события, о которых вебхук сообщил бы прямо,
+ * поэтому важно, какой ключ события получается на каждом переходе.
  */
 @SpringBootTest(properties = {
         "infra-manager.workers.scheduling-enabled=false",
@@ -60,7 +60,7 @@ class BitbucketPrPollerTest {
 
     @Test
     void aClosedPullRequestSeenForTheFirstTimeRaisesNothing() {
-        // Otherwise the first poll of a busy repository announces its whole history.
+        // Иначе первый же опрос активного репозитория объявит всю его историю.
         given(pr(2, "MERGED", 5, "commit-a", List.of()));
 
         assertThat(poller.runOnce()).isZero();
@@ -144,21 +144,21 @@ class BitbucketPrPollerTest {
 
     @Test
     void aPushOutranksASimultaneousReviewChange() {
-        // Pushing invalidates the review anyway, so the card belongs back in review.
+        // Пуш всё равно обесценивает ревью, так что карточке место обратно в ревью.
         given(pr(10, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "APPROVED", true))));
         poller.runOnce();
 
         given(pr(10, "OPEN", 2, "commit-b", List.of(reviewer("ivan", "UNAPPROVED", false))));
         poller.runOnce();
 
-        // First sight reports the approval, not a plain open -- see the tests below.
+        // При первой встрече сообщается об апруве, а не о простом открытии — см. тесты ниже.
         assertThat(eventTypes()).containsExactly("pr:reviewer:approved", "pr:from_ref_updated");
     }
 
     @Test
     void firstSightOfAnAlreadyApprovedPullRequestReportsTheApproval() {
-        // Otherwise a restart, or any reset of the snapshots, would drag every open
-        // card back to the review column regardless of where review had got to.
+        // Иначе перезапуск — или любой сброс снимков — утащил бы каждую открытую карточку
+        // обратно в колонку ревью независимо от того, до чего ревью успело дойти.
         given(pr(20, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "APPROVED", true))));
 
         poller.runOnce();

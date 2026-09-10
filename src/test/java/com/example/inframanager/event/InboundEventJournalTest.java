@@ -20,9 +20,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
-        // Drive the worker explicitly instead of racing the scheduler.
+        // Дёргаем воркер явно, а не соревнуемся с планировщиком.
         "infra-manager.workers.scheduling-enabled=false",
-        // Short enough to exhaust in a test.
+        // Достаточно мало, чтобы исчерпать попытки прямо в тесте.
         "infra-manager.workers.inbound.max-attempts=2"
 })
 @Import(TestcontainersConfiguration.class)
@@ -31,11 +31,10 @@ class InboundEventJournalTest {
     private static final String PAYLOAD = "{\"hello\":\"world\"}";
 
     /**
-     * This test is about the journal, not about what the events mean. The real
-     * handlers are mocked out so BambooOnlyHandler below is the only claimant of
-     * BAMBOO -- without this, InboundEventProcessor rejects the ambiguity at startup
-     * -- and BITBUCKET is left with no handler at all, which is the case one of the
-     * tests below exercises.
+     * Этот тест про журнал, а не про смысл событий. Настоящие обработчики подменены,
+     * чтобы BambooOnlyHandler ниже был единственным претендентом на BAMBOO — без этого
+     * InboundEventProcessor отверг бы неоднозначность на старте, — а у BITBUCKET не
+     * осталось обработчика вовсе, и именно этот случай проверяет один из тестов ниже.
      */
     @MockitoBean
     private DeploymentEventHandler deploymentEventHandler;
@@ -115,7 +114,7 @@ class InboundEventJournalTest {
         assertThat(afterFirst.getAttempts()).isEqualTo(1);
         assertThat(afterFirst.getLastError()).contains("Trello is down");
 
-        // The backoff is real time; wind it back rather than sleeping through it.
+        // Задержка отсчитывается по реальному времени; отматываем её назад, а не спим.
         expireBackoff();
         worker.runOnce();
 
@@ -149,7 +148,7 @@ class InboundEventJournalTest {
         return repository.findBySourceAndExternalId(source, externalId).orElseThrow();
     }
 
-    /** Registered for BAMBOO only, so BITBUCKET events exercise the no-handler path. */
+    /** Зарегистрирован только на BAMBOO, поэтому события BITBUCKET идут по пути «обработчика нет». */
     static class BambooOnlyHandler implements InboundEventHandler {
 
         final List<String> handled = new ArrayList<>();

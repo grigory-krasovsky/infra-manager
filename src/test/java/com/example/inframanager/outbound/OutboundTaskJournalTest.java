@@ -87,8 +87,8 @@ class OutboundTaskJournalTest {
 
         OutboundTask task = load("deploy:2");
         assertThat(task.getStatus()).isEqualTo(ProcessingStatus.PENDING);
-        // Being told to slow down is not a failed attempt; otherwise a busy period
-        // would burn the retry budget and drop notifications.
+        // Просьба сбавить темп — не неудачная попытка; иначе период высокой нагрузки
+        // сжёг бы бюджет повторов и уведомления потерялись бы.
         assertThat(task.getAttempts()).isZero();
         assertThat(task.getNextAttemptAt()).isAfter(Instant.now().plus(Duration.ofMinutes(4)));
     }
@@ -119,7 +119,7 @@ class OutboundTaskJournalTest {
         return repository.findByDedupKey(dedupKey).orElseThrow();
     }
 
-    /** Registered for TELEGRAM only, so TRELLO tasks exercise the no-sender path. */
+    /** Зарегистрирован только на TELEGRAM, поэтому задачи TRELLO идут по пути «отправителя нет». */
     static class TelegramOnlySender implements OutboundTaskSender {
 
         final List<String> sent = new ArrayList<>();

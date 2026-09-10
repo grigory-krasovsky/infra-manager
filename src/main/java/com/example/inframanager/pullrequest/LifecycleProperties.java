@@ -7,11 +7,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * The card lifecycle: which repositories mirror to which board, and which pull
- * request event lands the card in which column.
+ * Жизненный цикл карточки: какие репозитории зеркалятся на какую доску и какое событие
+ * пул-реквеста кладёт карточку в какую колонку.
  *
- * <p>Kept in configuration rather than the database because it is edited by hand and
- * there is no admin UI to edit rows with.
+ * <p>Живёт в конфигурации, а не в базе, потому что правится руками, а админки для
+ * редактирования строк нет.
  */
 @ConfigurationProperties("infra-manager.lifecycle")
 public record LifecycleProperties(
@@ -19,28 +19,28 @@ public record LifecycleProperties(
         @DefaultValue List<RepoBoard> repos,
 
         /**
-         * Bitbucket event key to Trello list name. An event that is absent here still
-         * refreshes the card's title and description, it just does not move it --
-         * which is what {@code pr:modified} should do.
+         * Ключ события Bitbucket → имя списка Trello. Событие, которого здесь нет, всё
+         * равно обновит заголовок и описание карточки — просто не переместит её, а
+         * именно так и должен вести себя {@code pr:modified}.
          *
-         * <p>A list of pairs rather than a map because event keys contain colons, and
-         * a colon is not a legal character in a Spring configuration property name.
-         * As a map this would need {@code "[pr:opened]": Review} in YAML, which looks
-         * like a mistake and silently binds to nothing once someone "fixes" it.
+         * <p>Список пар, а не map, потому что в ключах событий есть двоеточие, а
+         * двоеточие недопустимо в имени property Spring. В виде map пришлось бы писать
+         * в YAML {@code "[pr:opened]": Review} — выглядит как опечатка и молча перестаёт
+         * связываться, стоит кому-нибудь это «исправить».
          */
         @DefaultValue List<EventList> eventToList,
 
-        /** Whether new commits send an already-approved card back for review. */
+        /** Отправлять ли карточку с уже полученным апрувом обратно на ревью при новых коммитах. */
         @DefaultValue("true") boolean reopenOnNewCommits,
 
-        /** Where a card is created if {@code pr:opened} is not mapped. */
+        /** Где создаётся карточка, если {@code pr:opened} не отображён на список. */
         @DefaultValue("Review") String defaultList) {
 
     /**
-     * @param prefix short name shown at the front of the card title. Several
-     *               repositories share one board, and one task routinely produces two
-     *               pull requests -- front and back -- so the prefix is what keeps
-     *               their cards apart. Falls back to the slug when unset.
+     * @param prefix короткое имя в начале заголовка карточки. Несколько репозиториев
+     *               делят одну доску, а одна задача обычно порождает два пул-реквеста —
+     *               фронт и бэк, — так что именно префикс разводит их карточки. Если не
+     *               задан, берётся slug.
      */
     public record RepoBoard(String projectKey, String repoSlug, String trelloBoardId, String prefix) {
 
@@ -61,18 +61,18 @@ public record LifecycleProperties(
         return repos.stream().filter(repo -> repo.matches(ref)).findFirst();
     }
 
-    /** Where a card goes when it is first created. */
+    /** Куда попадает карточка, когда её только создали. */
     public String createInList() {
         return listNamed("pr:opened").orElse(defaultList);
     }
 
     /**
-     * @return the list this event moves the card to, or empty to leave it in place
+     * @return список, в который это событие перемещает карточку, либо empty — оставить на месте
      */
     public Optional<String> listFor(String eventKey) {
         if (reopenOnNewCommits && "pr:from_ref_updated".equals(eventKey)) {
-            // New commits invalidate an approval, so the card goes back to where a
-            // freshly opened PR would sit.
+            // Новые коммиты обесценивают апрув, поэтому карточка возвращается туда,
+            // где лежал бы только что открытый PR.
             return listNamed("pr:opened");
         }
         return listNamed(eventKey);

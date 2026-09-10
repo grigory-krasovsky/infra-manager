@@ -7,10 +7,10 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 /**
- * Finds a Jira issue key in a branch name or pull request title.
+ * Находит ключ задачи Jira в имени ветки или заголовке пул-реквеста.
  *
- * <p>Always available, even with Jira disabled: knowing the key is useful on its own
- * and gets recorded on the card link regardless of whether a summary can be fetched.
+ * <p>Доступен всегда, даже при выключенной Jira: знать сам ключ полезно и без summary,
+ * и он записывается в связку карточки независимо от того, удалось ли получить summary.
  */
 @Component
 public class IssueKeyExtractor {
@@ -22,8 +22,8 @@ public class IssueKeyExtractor {
     }
 
     /**
-     * Searches the branch name first: it is the more deliberate of the two, while a
-     * title can mention an unrelated ticket in passing.
+     * Сначала ищет в имени ветки: из двух это более осознанное место, тогда как в
+     * заголовке между делом может упоминаться посторонний тикет.
      */
     public Optional<String> extract(String branchName, String pullRequestTitle) {
         return firstMatch(branchName).or(() -> firstMatch(pullRequestTitle));

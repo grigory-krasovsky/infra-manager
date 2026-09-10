@@ -12,12 +12,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
 
 /**
- * Verifies the {@code X-Hub-Signature} Bitbucket sends when a webhook has a secret.
+ * Проверяет {@code X-Hub-Signature}, который Bitbucket присылает, когда у вебхука
+ * задан секрет.
  *
- * <p>The HMAC is computed over the exact bytes Bitbucket sent. Parsing the body to
- * JSON and re-serialising it -- which is what happens if a controller takes a typed
- * {@code @RequestBody} -- changes whitespace and makes every signature fail. That is
- * why the controller takes {@code byte[]}.
+ * <p>HMAC считается по ровно тем байтам, что прислал Bitbucket. Разбор тела в JSON и
+ * его повторная сериализация — а именно это и происходит, если контроллер принимает
+ * типизированный {@code @RequestBody} — меняют пробелы, и тогда ни одна подпись не
+ * сойдётся. Поэтому контроллер принимает {@code byte[]}.
  */
 public class HmacVerifier {
 
@@ -53,8 +54,8 @@ public class HmacVerifier {
             throw new IllegalStateException("Could not compute HMAC-SHA256", e);
         }
 
-        // Constant time: a byte-by-byte comparison leaks how much of a forged
-        // signature was correct.
+        // За постоянное время: побайтовое сравнение выдаёт, какая часть поддельной
+        // подписи была угадана верно.
         return MessageDigest.isEqual(expected, provided);
     }
 }

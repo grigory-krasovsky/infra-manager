@@ -10,10 +10,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * What a pull request looked like the last time we polled it.
+ * Как выглядел пул-реквест, когда мы опрашивали его в прошлый раз.
  *
- * <p>Only the polling path needs this. A webhook states what happened; polling shows
- * only the present, so the event has to be recovered by comparing against this.
+ * <p>Нужно только пути с поллингом. Вебхук сообщает, что произошло; опрос же показывает
+ * только настоящее, поэтому событие приходится восстанавливать сравнением с этой строкой.
  */
 @Entity
 @Table(name = "pr_poll_state")
@@ -81,7 +81,7 @@ public class PrPollState {
         return firstSeenAt;
     }
 
-    /** Records the observation just made. Digest is truncated to fit the column. */
+    /** Записывает только что сделанное наблюдение. Выжимка обрезается под размер колонки. */
     public void observe(String state, Integer version, String latestCommit, String reviewerDigest) {
         this.state = state;
         this.version = version;

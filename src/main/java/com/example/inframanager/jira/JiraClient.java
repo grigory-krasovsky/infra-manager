@@ -6,8 +6,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.service.annotation.GetExchange;
 
 /**
- * One read-only call. Jira is not a source of lifecycle events here -- pull requests
- * and deployments are -- so nothing else is needed.
+ * Один вызов только на чтение. Jira здесь не источник событий жизненного цикла — ими
+ * служат пул-реквесты и деплои, — поэтому больше ничего не нужно.
  */
 public interface JiraClient {
 

@@ -21,8 +21,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * The point of these tests is that nothing here ever throws: enrichment is
- * decoration, and a broken Jira must not be able to stop a card being created.
+ * Смысл этих тестов в том, что отсюда никогда не летит исключение: обогащение — это
+ * украшение, и сломанная Jira не должна уметь помешать созданию карточки.
  */
 class JiraEnricherTest {
 
@@ -78,7 +78,7 @@ class JiraEnricherTest {
         assertThat(enricher.summaryFor("PROJ-1")).contains("Once");
         assertThat(enricher.summaryFor("PROJ-1")).contains("Once");
 
-        // Only one request was stubbed; a second call would fail verification.
+        // Заглушен ровно один запрос; второй вызов не прошёл бы проверку.
         server.verify();
     }
 

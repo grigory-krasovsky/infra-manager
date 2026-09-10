@@ -15,11 +15,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * A queued call to Trello or Telegram.
+ * Поставленный в очередь вызов Trello или Telegram.
  *
- * <p>Queued rather than issued inline so that rate limits are handled in one place,
- * failures retry without losing the triggering event, and a container restart does
- * not drop work in flight.
+ * <p>В очередь, а не сразу по месту, — чтобы лимиты запросов обрабатывались в одном
+ * месте, сбои повторялись без потери исходного события, а перезапуск контейнера не
+ * терял работу в полёте.
  */
 @Entity
 @Table(name = "outbound_task")
@@ -33,13 +33,13 @@ public class OutboundTask {
     @Column(nullable = false, length = 32)
     private OutboundTarget target;
 
-    /** What to do, interpreted by the sender for this target (e.g. {@code sendMessage}). */
+    /** Что делать; трактуется отправителем этой цели (например, {@code sendMessage}). */
     @Column(nullable = false, length = 64)
     private String action;
 
     /**
-     * Derived from the thing that caused this task, not from the moment it was
-     * created, so re-processing an inbound event does not enqueue a second copy.
+     * Выводится из того, что породило задачу, а не из момента её создания, поэтому
+     * повторная обработка входящего события не поставит в очередь вторую копию.
      */
     @Column(name = "dedup_key", nullable = false, length = 255)
     private String dedupKey;

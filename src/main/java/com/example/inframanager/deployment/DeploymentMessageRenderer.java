@@ -6,9 +6,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Renders the Telegram text for a deployment. Telegram HTML parse mode, so every
- * value that comes from Bamboo has to be escaped -- project names and trigger
- * sentences contain user-typed text.
+ * Рендерит текст для Telegram по одному деплою. Режим разбора — HTML, поэтому любое
+ * значение, пришедшее из Bamboo, нужно экранировать: имена проектов и описания запуска
+ * содержат набранный человеком текст.
  */
 @Component
 public class DeploymentMessageRenderer {
@@ -48,7 +48,7 @@ public class DeploymentMessageRenderer {
         return minutes + " мин " + seconds + " с";
     }
 
-    /** Telegram HTML mode only requires these three to be escaped. */
+    /** В HTML-режиме Telegram экранировать нужно только эти три символа. */
     static String escape(String value) {
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }

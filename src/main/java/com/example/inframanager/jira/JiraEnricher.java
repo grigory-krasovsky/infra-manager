@@ -13,11 +13,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Looks up an issue summary so a card can be titled in human words.
+ * Достаёт summary задачи, чтобы карточку можно было озаглавить человеческими словами.
  *
- * <p>Strictly best-effort. Jira being unreachable, the key being wrong, or Jira being
- * switched off must never stop a card from being created -- this is decoration on top
- * of a lifecycle Jira has no part in. Every failure is swallowed and logged.
+ * <p>Строго best-effort. Ни недоступность Jira, ни неверный ключ, ни выключенная Jira
+ * не должны мешать создать карточку — это украшение поверх жизненного цикла, в котором
+ * Jira не участвует. Любой сбой проглатывается и пишется в лог.
  */
 @Component
 public class JiraEnricher {
@@ -25,8 +25,9 @@ public class JiraEnricher {
     private static final Logger log = LoggerFactory.getLogger(JiraEnricher.class);
 
     /**
-     * Failures are cached too, briefly: without this, an outage turns every pull
-     * request event into another doomed call while holding a worker's row lock.
+     * Сбои тоже кешируются, ненадолго: без этого во время аварии каждое событие
+     * пул-реквеста превращается в очередной обречённый вызов, пока воркер держит
+     * блокировку строки.
      */
     private static final Duration FAILURE_CACHE_TTL = Duration.ofMinutes(1);
 

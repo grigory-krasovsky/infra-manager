@@ -28,8 +28,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * The fallback used where Bamboo has no webhook templates. Stubs the REST API, so
- * it verifies the filtering and normalisation without needing a database.
+ * Запасной путь для случая, когда в Bamboo нет шаблонов вебхуков. Подменяет REST API,
+ * поэтому проверяет фильтрацию и приведение к общей форме без всякой базы.
  */
 class BambooDeploymentPollerTest {
 
@@ -80,8 +80,8 @@ class BambooDeploymentPollerTest {
                 .contains("\"deploymentProjectName\":\"INFRA\"")
                 .contains("\"environmentName\":\"STAGE\"")
                 .contains("\"deploymentVersionName\":\"release-9\"")
-                // Epoch millis are passed through as strings; BambooDeploymentEvent
-                // accepts either that or ISO-8601.
+                // Миллисекунды эпохи проходят насквозь строками; BambooDeploymentEvent
+                // принимает и их, и ISO-8601.
                 .contains("\"startedAt\":\"1757498400000\"");
     }
 

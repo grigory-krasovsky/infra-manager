@@ -31,8 +31,8 @@ class HmacVerifierTest {
 
     @Test
     void rejectsWhenTheBodyWasReformatted() {
-        // The failure this test exists to catch: parsing the JSON and re-serialising
-        // it changes only whitespace, and the signature stops matching.
+        // Сбой, ради которого этот тест и существует: разбор JSON с последующей
+        // сериализацией меняет одни лишь пробелы — и подпись перестаёт сходиться.
         byte[] reformatted = "{ \"eventKey\" : \"pr:opened\" }".getBytes(StandardCharsets.UTF_8);
 
         assertThat(verifier.verify(reformatted, sign(BODY))).isFalse();

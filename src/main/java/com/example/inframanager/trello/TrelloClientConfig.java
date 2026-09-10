@@ -107,7 +107,7 @@ public class TrelloClientConfig implements SchedulingConfigurer {
         if (!workerProperties.schedulingEnabled() || !properties.reconciliation().enabled()) {
             return;
         }
-        // Through a provider because the poller is a @Bean of this same class.
+        // Через provider, потому что поллер — это @Bean этого же класса.
         registrar.addFixedDelayTask(
                 () -> reconciliationPoller.getObject().runOnce(), properties.reconciliation().interval());
         log.info("Trello reconciliation scheduled every {}", properties.reconciliation().interval());

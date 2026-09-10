@@ -13,14 +13,14 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Performs TELEGRAM outbound tasks. Constructed by {@link TelegramClientConfig},
- * which only exists when Telegram is enabled.
+ * Выполняет исходящие задачи TELEGRAM. Создаётся в {@link TelegramClientConfig},
+ * который существует, только когда Telegram включён.
  */
 public class TelegramSender implements OutboundTaskSender {
 
     private static final Logger log = LoggerFactory.getLogger(TelegramSender.class);
 
-    /** Used when Telegram says 429 but does not say for how long. */
+    /** Используется, когда Telegram отвечает 429, но не говорит, на сколько. */
     private static final Duration DEFAULT_RETRY_AFTER = Duration.ofSeconds(30);
 
     private final TelegramClient client;
@@ -55,9 +55,9 @@ public class TelegramSender implements OutboundTaskSender {
                     "Telegram rate limited chat " + message.chatId(), retryAfterFrom(e));
         }
 
-        // Telegram normally signals failure with a non-2xx status, but the envelope
-        // carries its own ok flag; treat a false one as a failure rather than
-        // reporting a message we never actually delivered.
+        // Обычно Telegram сообщает о сбое статусом вне 2xx, но в конверте есть и
+        // собственный флаг ok; считаем его false сбоем, а не рапортуем об успешной
+        // отправке сообщения, которое на самом деле не доставили.
         if (response == null || !response.ok()) {
             throw new IllegalStateException("Telegram rejected sendMessage for chat %s: %s"
                     .formatted(message.chatId(), response == null ? "empty response" : response.description()));
@@ -66,7 +66,7 @@ public class TelegramSender implements OutboundTaskSender {
     }
 
     private Duration retryAfterFrom(HttpClientErrorException e) {
-        // Preferred source: {"parameters":{"retry_after":30}} in the error envelope.
+        // Предпочтительный источник: {"parameters":{"retry_after":30}} в конверте ошибки.
         try {
             JsonNode body = objectMapper.readTree(e.getResponseBodyAsString());
             JsonNode retryAfter = body.path("parameters").path("retry_after");

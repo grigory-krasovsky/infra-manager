@@ -22,7 +22,7 @@ import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Everything the polling fallback needs, present only when
+ * Всё, что нужно запасному пути с опросом; поднимается, только когда
  * {@code infra-manager.bamboo.source=poll}.
  */
 @Configuration(proxyBeanMethods = false)
@@ -61,7 +61,7 @@ public class BambooPollConfig implements SchedulingConfigurer {
 
         RestClient restClient = builder
                 .baseUrl(properties.baseUrl())
-                // Data Center personal access tokens authenticate as bearer tokens.
+                // Personal access token'ы Data Center аутентифицируются как bearer-токены.
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.token())
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .requestFactory(requestFactory)
@@ -85,8 +85,8 @@ public class BambooPollConfig implements SchedulingConfigurer {
         if (!workerProperties.schedulingEnabled()) {
             return;
         }
-        // Resolved through a provider, not injected: the poller is a @Bean of this
-        // same class, so a constructor dependency on it would be circular.
+        // Достаётся через provider, а не внедряется: поллер — это @Bean этого же класса,
+        // так что зависимость от него в конструкторе была бы циклической.
         registrar.addFixedDelayTask(
                 () -> poller.getObject().runOnce(), properties.poll().interval());
         log.info("Bamboo polling scheduled every {} for {} environment(s)",

@@ -17,16 +17,16 @@ import org.springframework.context.annotation.Import;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Builds every integration client for real -- no mocks anywhere.
+ * Собирает по-настоящему каждый клиент интеграции — никаких моков.
  *
- * <p>This exists because a missing {@code RestClient.Builder} bean once reached a
- * running container: every other test either constructed its client by hand or
- * replaced it with {@code @MockitoBean}, so no test ever executed the actual
- * {@code @Bean} factory methods. Anything that only breaks when a client is really
- * assembled belongs here.
+ * <p>Появился потому, что однажды отсутствующий бин {@code RestClient.Builder} доехал
+ * до работающего контейнера: все прочие тесты либо конструировали клиента руками, либо
+ * подменяли его через {@code @MockitoBean}, так что ни один тест не выполнял настоящие
+ * фабричные методы {@code @Bean}. Всему, что ломается только при реальной сборке
+ * клиента, место здесь.
  *
- * <p>Scheduling is off, so nothing reaches out over the network -- the hostnames
- * below are never dialled.
+ * <p>Планировщик выключен, поэтому наружу никто не ходит — до имён хостов ниже дело
+ * не доходит.
  */
 @SpringBootTest(properties = {
         "infra-manager.workers.scheduling-enabled=false",
@@ -52,8 +52,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "infra-manager.lifecycle.repos[0].repo-slug=liza",
         "infra-manager.lifecycle.repos[0].trello-board-id=board-1",
 
-        // Poll rather than webhook: the webhook controller is covered elsewhere, and
-        // the two modes are mutually exclusive within one context.
+        // Опрос, а не вебхук: контроллер вебхука покрыт в другом месте, а два режима
+        // внутри одного контекста взаимоисключающи.
         "infra-manager.bamboo.source=poll",
         "infra-manager.bamboo.base-url=https://bamboo.invalid",
         "infra-manager.bamboo.token=test-token",

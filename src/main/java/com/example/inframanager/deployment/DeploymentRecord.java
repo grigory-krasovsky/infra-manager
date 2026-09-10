@@ -10,11 +10,12 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * One deployment of one version to one stand, as reported by Bamboo.
+ * Один деплой одной версии на один стенд — так, как о нём сообщил Bamboo.
  *
- * <p>A deployment can be observed more than once (queued, then finished), so the
- * row is updated in place, keyed on Bamboo's result id. {@link #notifiedAt} is what
- * guarantees exactly one announcement regardless of how many observations arrive.
+ * <p>Один и тот же деплой можно наблюдать несколько раз (в очереди, потом завершён),
+ * поэтому строка обновляется на месте, а ключом служит id результата из Bamboo. Именно
+ * {@link #notifiedAt} гарантирует ровно одно объявление, сколько бы наблюдений ни
+ * пришло.
  */
 @Entity
 @Table(name = "deployment_record")
@@ -63,7 +64,7 @@ public class DeploymentRecord {
         apply(event);
     }
 
-    /** Folds a newer observation of the same deployment into this row. */
+    /** Вливает в эту строку более свежее наблюдение того же деплоя. */
     public void apply(BambooDeploymentEvent event) {
         this.projectName = event.projectNameOrUnknown();
         this.environmentName = event.environmentNameOrUnknown();

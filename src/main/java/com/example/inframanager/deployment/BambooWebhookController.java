@@ -20,14 +20,15 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Receives deployment results from Bamboo.
+ * Принимает результаты деплоя от Bamboo.
  *
- * <p>Does the minimum and returns: authenticate, record, 200. Bamboo's redelivery
- * budget is finite, so anything slow here risks losing an event permanently.
+ * <p>Делает минимум и возвращает управление: аутентифицировать, записать, 200. Бюджет
+ * повторных доставок у Bamboo конечен, поэтому всё медленное здесь рискует потерять
+ * событие навсегда.
  *
- * <p>Unlike Bitbucket, Bamboo webhook bodies are whatever our own template renders,
- * so there is no HMAC to verify -- authentication is a shared secret we put in the
- * template ourselves.
+ * <p>В отличие от Bitbucket, тело вебхука Bamboo — это то, что отрендерил наш же
+ * шаблон, поэтому проверять HMAC не нужно: аутентификация — общий секрет, который мы
+ * сами вписали в шаблон.
  */
 @RestController
 @RequestMapping("/webhooks/bamboo")
@@ -57,8 +58,9 @@ public class BambooWebhookController {
     public ResponseEntity<Void> receive(
             @RequestBody String body,
             @RequestHeader(name = SECRET_HEADER, required = false) String headerSecret,
-            // Accepted as a fallback for Bamboo versions whose templates cannot set
-            // headers. Secrets in URLs end up in access logs, so prefer the header.
+            // Принимается как запасной вариант для версий Bamboo, чьи шаблоны не умеют
+            // ставить заголовки. Секреты в URL оседают в access-логах, так что заголовок
+            // предпочтительнее.
             @RequestParam(name = "secret", required = false) String querySecret) {
 
         if (!secretMatches(headerSecret) && !secretMatches(querySecret)) {
@@ -78,8 +80,8 @@ public class BambooWebhookController {
             return ResponseEntity.badRequest().build();
         }
 
-        // Status is part of the key so a queued observation and the finished one are
-        // distinct events, while a plain redelivery of either is still a duplicate.
+        // Статус входит в ключ, чтобы наблюдение «в очереди» и «завершено» были разными
+        // событиями, а простая повторная доставка любого из них оставалась дубликатом.
         String externalId = event.deploymentResultId() + ":" + event.normalisedStatus();
         ingestService.ingest(EventSource.BAMBOO, externalId, "deployment", body);
         return ResponseEntity.ok().build();

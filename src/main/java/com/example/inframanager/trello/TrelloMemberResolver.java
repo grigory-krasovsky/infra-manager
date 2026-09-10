@@ -12,15 +12,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Matches a pull request author to a member of the Trello board.
+ * Сопоставляет автора пул-реквеста с участником доски Trello.
  *
- * <p>Unlike labels, members cannot be created: somebody either has a Trello account
- * on that board or does not. Nobody matched simply means no member is assigned --
- * that is a normal outcome, not a failure, because contributors are not necessarily
- * invited to the board.
+ * <p>В отличие от меток, участников создать нельзя: у человека либо есть учётная запись
+ * Trello на этой доске, либо нет. Если никто не совпал, карточка просто остаётся без
+ * исполнителя — это нормальный исход, а не сбой, ведь участников репозитория не
+ * обязательно приглашают на доску.
  *
- * <p>Matching tries the Bitbucket login against the Trello username first, then the
- * display name against the member's full name, both case-insensitively.
+ * <p>Сопоставление сначала пробует логин Bitbucket против username в Trello, затем
+ * отображаемое имя против полного имени участника — и то и другое без учёта регистра.
  */
 public class TrelloMemberResolver {
 
@@ -36,8 +36,9 @@ public class TrelloMemberResolver {
     }
 
     /**
-     * @param candidates identifiers to try, most specific first (login, then display name)
-     * @return ids of matching board members; empty when nobody matches
+     * @param candidates идентификаторы для перебора, от наиболее точного (логин, затем
+     *                   отображаемое имя)
+     * @return id подошедших участников доски; пусто, если не совпал никто
      */
     public List<String> memberIds(String boardId, List<String> candidates) {
         if (candidates == null || candidates.isEmpty()) {
@@ -49,8 +50,8 @@ public class TrelloMemberResolver {
             if (candidate == null || candidate.isBlank()) {
                 continue;
             }
-            // Configured mapping first: the same person is usually spelled
-            // differently in Bitbucket and Trello, so this is the only reliable link.
+            // Сначала соответствие из конфигурации: один и тот же человек обычно записан
+            // в Bitbucket и Trello по-разному, так что это единственная надёжная связь.
             String mapped = properties.members().get(candidate.trim());
             String id = mapped != null ? byIdentifier.get(normalise(mapped)) : null;
             if (id == null) {
@@ -94,7 +95,7 @@ public class TrelloMemberResolver {
                 }
             }
         } catch (Exception e) {
-            // Assigning a member is cosmetic; failing the card over it would be worse.
+            // Назначение участника — косметика; уронить из-за неё карточку было бы хуже.
             log.warn("Could not read members of Trello board {}", boardId, e);
         }
         return new CachedMembers(Map.copyOf(byIdentifier), Instant.now());

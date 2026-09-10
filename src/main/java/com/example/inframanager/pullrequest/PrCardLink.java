@@ -10,10 +10,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * Remembers which Trello card mirrors which pull request.
+ * Помнит, какая карточка Trello отражает какой пул-реквест.
  *
- * <p>The Bitbucket payload knows nothing about Trello, so without this row the
- * service could only create cards, never move them.
+ * <p>Payload Bitbucket ничего не знает про Trello, поэтому без этой строки сервис умел
+ * бы только создавать карточки, но не перемещать их.
  */
 @Entity
 @Table(name = "pr_card_link")
@@ -35,7 +35,7 @@ public class PrCardLink {
     @Column(name = "trello_board_id", nullable = false, length = 64)
     private String trelloBoardId;
 
-    /** Null until the card has actually been created in Trello. */
+    /** Null, пока карточка реально не создана в Trello. */
     @Column(name = "trello_card_id", length = 64)
     private String trelloCardId;
 

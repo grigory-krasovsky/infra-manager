@@ -6,7 +6,7 @@ import java.util.Optional;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
- * Те части webhook-payload'а Bitbucket Data Center о пул-реквесте, которые нам нужны.
+ * Те части payload'а вебхука Bitbucket Data Center о пул-реквесте, которые нам нужны.
  *
  * <p>На практике null может прийти в любом поле: форма payload'а немного меняется от
  * типа события и от версии Bitbucket, а отсутствующее поле должно ухудшить карточку,
@@ -63,8 +63,8 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
     }
 
     /**
-     * Identifies the pull request by its <em>target</em> repository. The source side
-     * can be a fork, which would key the card to somebody's personal repo.
+     * Определяет пул-реквест по <em>целевому</em> репозиторию. Исходной стороной может
+     * оказаться форк, и тогда карточка была бы привязана к чьему-то личному репозиторию.
      */
     public Optional<PullRequestRef> ref() {
         if (pullRequest == null || pullRequest.toRef() == null) {
@@ -102,11 +102,11 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
     }
 
     /**
-     * Compact summary of who has approved and who wants changes.
+     * Компактная выжимка: кто одобрил, а кто просит доработок.
      *
-     * <p>Stored instead of the reviewer list so that a change in review status is
-     * detectable without keeping a copy of every reviewer on every pull request.
-     * Sorted so that Bitbucket reordering the list is not mistaken for a change.
+     * <p>Хранится вместо списка ревьюеров, чтобы замечать смену статуса ревью, не держа
+     * копию всех ревьюеров каждого пул-реквеста. Отсортирована, чтобы перестановка
+     * списка на стороне Bitbucket не выглядела как изменение.
      */
     public String reviewerDigest() {
         if (pullRequest == null || pullRequest.reviewers() == null) {
@@ -119,7 +119,7 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
                 .collect(java.util.stream.Collectors.joining(","));
     }
 
-    /** True when at least one reviewer has approved. */
+    /** True, если хотя бы один ревьюер одобрил. */
     public boolean hasApproval() {
         if (pullRequest == null || pullRequest.reviewers() == null) {
             return false;
@@ -128,7 +128,7 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
                 .anyMatch(reviewer -> reviewer != null && Boolean.TRUE.equals(reviewer.approved()));
     }
 
-    /** True when at least one reviewer marked the pull request as needing work. */
+    /** True, если хотя бы один ревьюер пометил пул-реквест как требующий доработки. */
     public boolean hasChangesRequested() {
         if (pullRequest == null || pullRequest.reviewers() == null) {
             return false;
@@ -141,7 +141,7 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
         return pullRequest == null || pullRequest.toRef() == null ? null : pullRequest.toRef().displayId();
     }
 
-    /** Bitbucket login, which is the less ambiguous way to identify a person. */
+    /** Логин в Bitbucket — менее двусмысленный способ опознать человека. */
     public String authorLogin() {
         if (pullRequest == null || pullRequest.author() == null || pullRequest.author().user() == null) {
             return null;

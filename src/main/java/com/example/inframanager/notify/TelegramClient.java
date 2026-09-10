@@ -7,15 +7,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.service.annotation.PostExchange;
 
 /**
- * Declarative client for the slice of the Bot API we use.
+ * Декларативный клиент для того куска Bot API, которым мы пользуемся.
  *
- * <p>Only sending is covered. Receiving would mean {@code getUpdates} long polling,
- * which is deliberately out of scope: notifications need no inbound port, and
- * Telegram rejects concurrent {@code getUpdates} for one token with 409, so a poller
- * would have to be a strict singleton.
+ * <p>Покрыта только отправка. Приём означал бы long polling через {@code getUpdates},
+ * а это намеренно вне рамок задачи: уведомлениям входящий порт не нужен, а параллельные
+ * {@code getUpdates} по одному токену Telegram отклоняет с 409, так что поллер пришлось
+ * бы держать строго в одном экземпляре.
  *
- * <p>The bot token lives in the base URL ({@code /bot<token>}), so it never appears
- * in these signatures.
+ * <p>Токен бота живёт в базовом URL ({@code /bot<token>}), поэтому в этих сигнатурах он
+ * не появляется.
  */
 public interface TelegramClient {
 

@@ -8,32 +8,32 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.util.StringUtils;
 
 /**
- * Canonical shape of a deployment result, written by both ingestion paths: the
- * webhook controller stores the body produced by our own Bamboo template
- * (docs/bamboo-webhook-template.json), and the poller normalises REST responses
- * into the same shape. Everything downstream therefore sees one format.
+ * Каноническая форма результата деплоя, которую пишут оба пути приёма: контроллер
+ * вебхука сохраняет тело, собранное нашим же шаблоном Bamboo
+ * (docs/bamboo-webhook-template.json), а поллер приводит ответы REST к той же форме.
+ * Всё, что дальше по цепочке, видит благодаря этому один формат.
  *
- * <p>Timestamps arrive as strings because the two sources disagree: Bamboo's REST
- * API returns epoch milliseconds while a Velocity template renders whatever the
- * date format produces. {@link #parseInstant} accepts both.
+ * <p>Метки времени приходят строками, потому что два источника расходятся: REST API
+ * Bamboo возвращает миллисекунды эпохи, а шаблон Velocity рендерит то, что даёт формат
+ * даты. {@link #parseInstant} принимает и то и другое.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record BambooDeploymentEvent(
 
         Long deploymentResultId,
 
-        /** Bamboo's {@code deploymentState}: SUCCESS, FAILED, UNKNOWN. */
+        /** {@code deploymentState} из Bamboo: SUCCESS, FAILED, UNKNOWN. */
         String status,
 
-        /** Bamboo's {@code lifeCycleState}: QUEUED, IN_PROGRESS, FINISHED. Absent on webhooks. */
+        /** {@code lifeCycleState} из Bamboo: QUEUED, IN_PROGRESS, FINISHED. В вебхуках отсутствует. */
         String lifeCycleState,
 
         String deploymentProjectName,
 
         /**
-         * Present when the webhook template exposes it. Older Bamboo templates offer
-         * only the id, so {@code infra-manager.bamboo.project-names} can supply the
-         * display name instead.
+         * Есть, если шаблон вебхука его отдаёт. Старые шаблоны Bamboo предлагают только
+         * id, поэтому отображаемое имя может подставить
+         * {@code infra-manager.bamboo.project-names}.
          */
         Long deploymentProjectId,
 
@@ -57,12 +57,12 @@ public record BambooDeploymentEvent(
         return "SUCCESS".equalsIgnoreCase(status);
     }
 
-    /** Webhooks fire on completion and omit the lifecycle field, so absent means finished. */
+    /** Вебхуки срабатывают по завершении и поля lifecycle не присылают, поэтому его отсутствие означает «завершено». */
     public boolean isFinished() {
         return !StringUtils.hasText(lifeCycleState) || "FINISHED".equalsIgnoreCase(lifeCycleState);
     }
 
-    /** Queued and in-progress deployments are recorded but not announced. */
+    /** Деплои в очереди и в процессе записываются, но не объявляются. */
     public boolean isNotifiable() {
         return isFinished() && !UNKNOWN.equals(normalisedStatus());
     }
@@ -85,7 +85,7 @@ public record BambooDeploymentEvent(
         return StringUtils.hasText(environmentName) ? environmentName : UNKNOWN;
     }
 
-    /** Named apart from the {@code startedAt} component because a record accessor cannot change type. */
+    /** Названо иначе, чем компонент {@code startedAt}, потому что аксессор record'а не может сменить тип. */
     public Instant startedInstant() {
         return parseInstant(startedAt);
     }
@@ -94,7 +94,7 @@ public record BambooDeploymentEvent(
         return parseInstant(finishedAt);
     }
 
-    /** Null when either end is missing or unparseable -- the message just omits it. */
+    /** Null, если один из концов отсутствует или не разбирается, — сообщение просто обойдётся без этого. */
     public Duration duration() {
         Instant from = startedInstant();
         Instant to = finishedInstant();
@@ -112,7 +112,7 @@ public record BambooDeploymentEvent(
         try {
             return Instant.ofEpochMilli(Long.parseLong(trimmed));
         } catch (NumberFormatException notEpochMillis) {
-            // Fall through to ISO-8601.
+            // Проваливаемся к ISO-8601.
         }
         try {
             return Instant.parse(trimmed);

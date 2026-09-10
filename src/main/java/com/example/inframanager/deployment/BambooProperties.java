@@ -11,18 +11,18 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record BambooProperties(
 
         /**
-         * Defaults to NONE so the service starts before Bamboo is wired up. Flip to
-         * WEBHOOK once the webhook template exists, or POLL if this Bamboo has no
-         * Communication -> Webhook templates section.
+         * По умолчанию NONE, чтобы сервис стартовал до того, как подключён Bamboo.
+         * Переключите на WEBHOOK, когда появится шаблон вебхука, или на POLL, если в
+         * этом Bamboo нет раздела Communication -> Webhook templates.
          */
         @DefaultValue("none") Source source,
 
-        /** As reachable from inside the container; see docs/runbook.md. */
+        /** В том виде, в каком адрес доступен изнутри контейнера; см. docs/runbook.md. */
         @DefaultValue("") String baseUrl,
 
         @DefaultValue("") String token,
 
-        /** Shared secret the webhook template sends back to us. */
+        /** Общий секрет, который шаблон вебхука присылает нам обратно. */
         @DefaultValue("") String webhookSecret,
 
         @DefaultValue("5s") Duration connectTimeout,
@@ -30,20 +30,19 @@ public record BambooProperties(
         @DefaultValue("15s") Duration readTimeout,
 
         /**
-         * Deployments that finished longer ago than this are recorded but not
-         * announced.
+         * Деплои, завершившиеся раньше этого срока, записываются, но не объявляются.
          *
-         * <p>Without it, the first poll against a live Bamboo treats every historical
-         * result it can see as news and floods the chat -- ten results per environment,
-         * across every configured environment. It also covers the other direction: after
-         * the service has been down for a day, nobody wants yesterday's deployments
-         * arriving all at once.
+         * <p>Без этого первый же опрос живого Bamboo счёл бы новостью каждый доступный
+         * ему исторический результат и завалил бы чат — по десять результатов на
+         * окружение, и так по всем настроенным окружениям. Это же прикрывает и обратный
+         * случай: после суток простоя сервиса никто не хочет получить вчерашние деплои
+         * разом.
          */
         @DefaultValue("1h") Duration maxNotificationAge,
 
         /**
-         * Deployment project id to display name. Only needed when the Bamboo webhook
-         * template cannot render a project name -- older templates expose just the id.
+         * Id проекта деплоя → отображаемое имя. Нужно, только когда шаблон вебхука
+         * Bamboo не умеет отрендерить имя проекта: старые шаблоны отдают лишь id.
          */
         @DefaultValue Map<Long, String> projectNames,
 
@@ -51,13 +50,13 @@ public record BambooProperties(
 
     public enum Source {
 
-        /** Bamboo pushes to us. Preferred: no polling load, near-instant. */
+        /** Bamboo пушит к нам. Предпочтительно: нет нагрузки от опроса, почти мгновенно. */
         WEBHOOK,
 
-        /** We ask Bamboo. Fallback for versions without webhook templates. */
+        /** Мы спрашиваем Bamboo. Запасной вариант для версий без шаблонов вебхуков. */
         POLL,
 
-        /** Bamboo not wired up yet. */
+        /** Bamboo ещё не подключён. */
         NONE
     }
 
@@ -65,15 +64,15 @@ public record BambooProperties(
 
             @DefaultValue("60s") Duration interval,
 
-            /** How far back each pass looks; only unseen results produce anything. */
+            /** Насколько глубоко смотрит каждый проход; что-то дают только не виденные раньше результаты. */
             @DefaultValue("10") int maxResults,
 
             @DefaultValue List<Environment> environments) {
 
         /**
-         * Environment ids have to be listed explicitly. Discovering them from the
-         * deployment dashboard would be one more Bamboo response shape to depend on,
-         * and the names are needed for the message anyway.
+         * Id окружений приходится перечислять явно. Вытаскивать их с дашборда деплоев —
+         * это ещё одна форма ответа Bamboo, от которой мы бы зависели, а имена всё равно
+         * нужны для сообщения.
          */
         public record Environment(long id, String projectName, String environmentName) {
         }

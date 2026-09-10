@@ -37,7 +37,7 @@ public class JiraClientConfig {
 
         RestClient restClient = builder
                 .baseUrl(properties.baseUrl())
-                // Data Center PATs are bearer tokens, not basic auth.
+                // PAT'ы Data Center — это bearer-токены, а не basic auth.
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.token())
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .requestFactory(requestFactory)

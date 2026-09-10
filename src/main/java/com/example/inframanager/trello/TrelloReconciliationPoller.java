@@ -15,11 +15,11 @@ import org.springframework.web.client.HttpClientErrorException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Compares what we believe about each card against what Trello actually has.
+ * Сверяет то, что мы думаем о каждой карточке, с тем, что на самом деле в Trello.
  *
- * <p>The sync is one-way, so nothing else would ever notice a card being dragged to
- * another column or deleted. This is what the "poll Trello" half of the design is
- * for.
+ * <p>Синхронизация односторонняя, поэтому больше никто и не заметил бы, что карточку
+ * перетащили в другую колонку или удалили. Ради этого в устройстве системы и есть
+ * половина «опрашивать Trello».
  */
 public class TrelloReconciliationPoller {
 
@@ -46,7 +46,7 @@ public class TrelloReconciliationPoller {
         this.objectMapper = objectMapper;
     }
 
-    /** @return how many discrepancies this pass found */
+    /** @return сколько расхождений нашёл этот проход */
     @Transactional
     public int runOnce() {
         int discrepancies = 0;
@@ -54,7 +54,7 @@ public class TrelloReconciliationPoller {
             try {
                 discrepancies += check(link);
             } catch (Exception e) {
-                // One bad card must not abort the sweep.
+                // Одна проблемная карточка не должна прерывать весь обход.
                 log.warn("Could not reconcile card {} for {}/{}/{}", link.getTrelloCardId(),
                         link.getProjectKey(), link.getRepoSlug(), link.getPrId(), e);
             }
@@ -98,7 +98,7 @@ public class TrelloReconciliationPoller {
         if (properties.reconciliation().onDrift() != TrelloProperties.Reconciliation.OnDrift.RESTORE) {
             log.warn("Card {} for {} sits in '{}' but we expected '{}'",
                     card.id(), pr, actual, expected);
-            // Adopt what Trello says, so the same drift is not reported every pass.
+            // Принимаем версию Trello, чтобы не сообщать об одном и том же расхождении каждый проход.
             link.recordCard(card.id(), card.idList(), card.closed());
             return 1;
         }
@@ -110,9 +110,9 @@ public class TrelloReconciliationPoller {
                 link.getTrelloBoardId(),
                 expected,
                 expected,
-                // Title, description, labels and members stay null so the card's
-                // content is untouched; UpdateCardRequest omits nulls, making this a
-                // pure move.
+                // Заголовок, описание, метки и участники остаются null, чтобы содержимое
+                // карточки не менялось; UpdateCardRequest пропускает null'ы, так что это
+                // чистое перемещение.
                 null,
                 null,
                 null,
@@ -120,8 +120,9 @@ public class TrelloReconciliationPoller {
                 null,
                 false);
 
-        // Bucketed by minute: repeated passes seeing the same unfixed drift collapse
-        // into one task, but a genuine second drift later still gets its own.
+        // Разложено по минутным корзинам: несколько проходов, видящих одно и то же
+        // неисправленное расхождение, схлопываются в одну задачу, а по-настоящему второе
+        // расхождение позже всё равно получит свою.
         String bucket = String.valueOf(Instant.now().truncatedTo(ChronoUnit.MINUTES).getEpochSecond());
         taskService.enqueue(OutboundTarget.TRELLO, "syncCard",
                 "trello:reconcile:%s:%s".formatted(pr, bucket),

@@ -22,8 +22,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The phase 3 acceptance path end to end: Bamboo posts a deployment result, and a
- * Telegram message ends up queued for the right chat with the right text.
+ * Приёмочный путь фазы 3 от начала до конца: Bamboo постит результат деплоя, а в очереди
+ * оказывается сообщение Telegram — в нужный чат и с нужным текстом.
  */
 @SpringBootTest(properties = {
         "infra-manager.workers.scheduling-enabled=false",
@@ -87,8 +87,8 @@ class BambooDeploymentFlowTest {
 
     @Test
     void aQueuedObservationIsRecordedAndOnlyTheFinishedOneIsAnnounced() throws Exception {
-        // Distinct external ids, because status is part of the key -- so both reach
-        // the handler, but only the terminal one produces a message.
+        // Разные внешние id, потому что статус входит в ключ: до обработчика доходят оба,
+        // но сообщение порождает только терминальный.
         postWebhook("""
                 {"deploymentResultId":1003,"status":"UNKNOWN","lifeCycleState":"IN_PROGRESS",
                  "deploymentProjectName":"INFRA","environmentName":"STAGE"}
@@ -173,8 +173,8 @@ class BambooDeploymentFlowTest {
 
     @Test
     void aDeploymentThatFinishedLongAgoIsRecordedButNotAnnounced() throws Exception {
-        // What the first poll against a live Bamboo sees: a backlog of historical
-        // results. Recording them is right; announcing them would flood the chat.
+        // То, что видит первый опрос живого Bamboo: залежи исторических результатов.
+        // Записать их правильно; объявить — значит завалить чат.
         long finished = System.currentTimeMillis() - Duration.ofDays(3).toMillis();
         postWebhook(body(1009, "SUCCESS", "INFRA", "STAGE", finished - 30_000, finished));
 
@@ -183,15 +183,15 @@ class BambooDeploymentFlowTest {
         assertThat(outboundTasks.count()).isZero();
         assertThat(deployments.findByBambooDeploymentResultId(1009)).hasValueSatisfying(record -> {
             assertThat(record.getStatus()).isEqualTo("SUCCESS");
-            // Marked notified so a later observation cannot resurrect it.
+            // Помечен объявленным, чтобы более позднее наблюдение не воскресило его.
             assertThat(record.getNotifiedAt()).isNotNull();
         });
     }
 
     @Test
     void aDeploymentWithNoFinishTimeIsStillAnnounced() throws Exception {
-        // Only happens on webhook payloads, which arrive as the deployment ends.
-        // Staying silent about a real deployment is the worse failure.
+        // Бывает только у payload'ов вебхука, которые приходят в момент окончания деплоя.
+        // Промолчать о настоящем деплое — сбой похуже.
         postWebhook("""
                 {"deploymentResultId":1010,"status":"SUCCESS","deploymentProjectName":"INFRA",
                  "environmentName":"STAGE"}
@@ -219,7 +219,7 @@ class BambooDeploymentFlowTest {
                 .andExpect(status().isOk());
     }
 
-    /** Timestamps are relative to now: a fixed past date would age past the announcement window. */
+    /** Метки времени отсчитываются от «сейчас»: фиксированная дата в прошлом выпала бы из окна объявления. */
     private String body(long resultId, String status, String project, String environment) {
         long finished = System.currentTimeMillis();
         return body(resultId, status, project, environment, finished - 30_000, finished);

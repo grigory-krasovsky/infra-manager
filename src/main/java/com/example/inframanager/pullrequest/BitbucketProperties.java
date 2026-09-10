@@ -9,21 +9,21 @@ import org.springframework.util.StringUtils;
 @ConfigurationProperties("infra-manager.bitbucket")
 public record BitbucketProperties(
 
-        /** Exposes /webhooks/bitbucket. Off until the webhook secret exists. */
+        /** Открывает /webhooks/bitbucket. Выключено, пока нет секрета вебхука. */
         @DefaultValue("false") boolean enabled,
 
-        /** As reachable from inside the container. */
+        /** В том виде, в каком адрес доступен изнутри контейнера. */
         @DefaultValue("") String baseUrl,
 
         /**
-         * The URL a human should click. Usually the same as {@link #baseUrl}, but they
-         * differ when the container reaches Bitbucket through host.docker.internal.
+         * URL, по которому кликает человек. Обычно совпадает с {@link #baseUrl}, но они
+         * расходятся, когда контейнер ходит в Bitbucket через host.docker.internal.
          */
         @DefaultValue("") String browseUrl,
 
         @DefaultValue("") String token,
 
-        /** Shared with the Bitbucket webhook; used for the X-Hub-Signature HMAC. */
+        /** Общий с вебхуком Bitbucket; используется для HMAC в X-Hub-Signature. */
         @DefaultValue("") String webhookSecret,
 
         @DefaultValue("5s") Duration connectTimeout,
@@ -33,10 +33,10 @@ public record BitbucketProperties(
         @DefaultValue Poll poll) {
 
     /**
-     * Polling replaces webhooks when Bitbucket cannot open a connection to us --
-     * the usual situation when this service runs outside the corporate network.
-     * Repositories come from {@code infra-manager.lifecycle.repos}: polling a
-     * repository we do not mirror would produce events nobody acts on.
+     * Поллинг заменяет вебхуки, когда Bitbucket не может открыть соединение к нам, —
+     * обычная ситуация, если сервис работает вне корпоративной сети. Репозитории берутся
+     * из {@code infra-manager.lifecycle.repos}: опрос репозитория, который мы не зеркалим,
+     * породил бы события, на которые никто не реагирует.
      */
     public record Poll(
 
@@ -44,7 +44,7 @@ public record BitbucketProperties(
 
             @DefaultValue("2m") Duration interval,
 
-            /** Pull requests read per repository per pass, newest first. */
+            /** Сколько пул-реквестов читаем за проход по репозиторию, начиная с самых свежих. */
             @DefaultValue("50") int maxResults) {
     }
 

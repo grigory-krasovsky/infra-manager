@@ -12,12 +12,12 @@ import org.springframework.web.service.annotation.PostExchange;
 import org.springframework.web.service.annotation.PutExchange;
 
 /**
- * The slice of the Trello REST API we use.
+ * Тот кусок REST API Trello, которым мы пользуемся.
  *
- * <p>Trello authenticates with {@code key} and {@code token} query parameters, not a
- * header, so they are explicit arguments on every call. There is exactly one caller
- * ({@link TrelloSender}), and spelling the credentials out beats hiding them in a
- * URI-rewriting interceptor.
+ * <p>Trello аутентифицируется query-параметрами {@code key} и {@code token}, а не
+ * заголовком, поэтому они присутствуют явными аргументами в каждом вызове. Вызывающий
+ * ровно один ({@link TrelloSender}), и написать учётные данные открыто лучше, чем
+ * прятать их в перехватчике, переписывающем URI.
  */
 public interface TrelloClient {
 
@@ -77,7 +77,7 @@ public interface TrelloClient {
     record TrelloMember(String id, String username, String fullName) {
     }
 
-    /** {@code idLabels} and {@code idMembers} are comma-separated, as Trello expects. */
+    /** {@code idLabels} и {@code idMembers} перечисляются через запятую — так их ждёт Trello. */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     record CreateCardRequest(String idList, String name, String desc, String pos,
                              String idLabels, String idMembers) {

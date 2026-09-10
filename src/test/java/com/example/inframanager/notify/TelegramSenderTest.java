@@ -23,8 +23,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * Exercises the sender against a stubbed Bot API -- no container needed, since the
- * interesting behaviour is entirely in how responses are interpreted.
+ * Гоняет отправителя против заглушенного Bot API — контейнер не нужен, потому что всё
+ * интересное поведение целиком в том, как трактуются ответы.
  */
 class TelegramSenderTest {
 

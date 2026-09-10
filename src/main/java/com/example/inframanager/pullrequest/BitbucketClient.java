@@ -8,10 +8,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.service.annotation.GetExchange;
 
 /**
- * The slice of Bitbucket's REST API the polling path needs.
+ * Тот кусок REST API Bitbucket, который нужен пути с поллингом.
  *
- * <p>Only used when webhooks cannot reach us -- which is the normal case when the
- * service runs outside the network Bitbucket lives in.
+ * <p>Используется, только когда вебхуки до нас не доходят, — а это обычная ситуация,
+ * если сервис работает вне сети, где живёт Bitbucket.
  */
 public interface BitbucketClient {
 
@@ -23,8 +23,8 @@ public interface BitbucketClient {
                                  @RequestParam("limit") int limit);
 
     /**
-     * The entries are the same shape Bitbucket puts under {@code pullRequest} in a
-     * webhook body, which is what lets the poller hand them to the same handler.
+     * Элементы имеют ту же форму, что Bitbucket кладёт в {@code pullRequest} тела
+     * вебхука, — именно это позволяет поллеру отдавать их тому же обработчику.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record PullRequestPage(List<BitbucketPrEvent.PullRequest> values) {

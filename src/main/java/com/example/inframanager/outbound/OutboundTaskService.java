@@ -6,8 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Entry point for everything that wants to call Trello or Telegram. Nothing calls
- * those APIs directly; it all goes through the queue.
+ * Точка входа для всего, что хочет обратиться к Trello или Telegram. Напрямую эти API
+ * не вызывает никто — всё идёт через очередь.
  */
 @Service
 public class OutboundTaskService {
@@ -21,9 +21,9 @@ public class OutboundTaskService {
     }
 
     /**
-     * @param dedupKey must be derived from the triggering fact, not from the current
-     *                 time, or retries of the same event will enqueue duplicates
-     * @return true if the task was queued, false if an identical one already was
+     * @param dedupKey должен выводиться из породившего задачу факта, а не из текущего
+     *                 времени, иначе повторы одного события наплодят дубликаты
+     * @return true, если задача поставлена в очередь; false, если такая уже была
      */
     @Transactional
     public boolean enqueue(OutboundTarget target, String action, String dedupKey, String payload) {

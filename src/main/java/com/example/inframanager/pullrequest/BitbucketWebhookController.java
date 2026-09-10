@@ -20,10 +20,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Receives pull request events from Bitbucket.
+ * Принимает события пул-реквестов от Bitbucket.
  *
- * <p>Takes the body as {@code byte[]} on purpose: the HMAC covers the exact bytes
- * sent, so the signature has to be checked before Jackson gets anywhere near it.
+ * <p>Тело намеренно берётся как {@code byte[]}: HMAC считается по ровно тем байтам,
+ * что были отправлены, поэтому подпись надо проверить до того, как до тела доберётся
+ * Jackson.
  */
 @RestController
 @RequestMapping("/webhooks/bitbucket")
@@ -62,9 +63,9 @@ public class BitbucketWebhookController {
             return ResponseEntity.badRequest().build();
         }
 
-        // Bitbucket's per-delivery request id is not guaranteed stable across retries,
-        // so identity comes from the content: an identical redelivery hashes the same,
-        // a genuinely new event does not.
+        // Идентификатор доставки у Bitbucket не гарантированно одинаков при повторах,
+        // поэтому личность события берётся из содержимого: точный повтор даёт тот же хеш,
+        // а по-настоящему новое событие — нет.
         String externalId = digest(eventKey, body);
         ingestService.ingest(EventSource.BITBUCKET, externalId, eventKey,
                 new String(body, StandardCharsets.UTF_8));

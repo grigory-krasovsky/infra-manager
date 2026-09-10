@@ -8,10 +8,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.service.annotation.GetExchange;
 
 /**
- * The slice of Bamboo's REST API the polling fallback needs.
+ * Тот кусок REST API Bamboo, который нужен запасному пути с опросом.
  *
- * <p>Only used when {@code infra-manager.bamboo.source=poll}; with webhooks we never
- * call Bamboo at all.
+ * <p>Используется только при {@code infra-manager.bamboo.source=poll}; с вебхуками мы
+ * в Bamboo не ходим вообще.
  */
 public interface BambooClient {
 
@@ -28,15 +28,15 @@ public interface BambooClient {
 
             long id,
 
-            /** SUCCESS, FAILED or UNKNOWN. */
+            /** SUCCESS, FAILED или UNKNOWN. */
             String deploymentState,
 
-            /** QUEUED, IN_PROGRESS or FINISHED. */
+            /** QUEUED, IN_PROGRESS или FINISHED. */
             String lifeCycleState,
 
             String deploymentVersionName,
 
-            /** Epoch milliseconds. */
+            /** Миллисекунды эпохи. */
             Long startedDate,
 
             Long finishedDate,

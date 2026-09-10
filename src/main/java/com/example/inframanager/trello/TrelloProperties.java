@@ -9,43 +9,43 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("infra-manager.trello")
 public record TrelloProperties(
 
-        /** While false, card tasks are queued and marked SKIPPED rather than dropped. */
+        /** Пока false, задачи по карточкам ставятся в очередь и помечаются SKIPPED, а не теряются. */
         @DefaultValue("false") boolean enabled,
 
         @DefaultValue("https://api.trello.com") String baseUrl,
 
         /**
-         * From the API Key tab of a Power-Up at https://trello.com/apps/admin -- since
-         * 2024 there is no other way to get one. Not a secret.
+         * Со вкладки API Key у Power-Up на https://trello.com/apps/admin — с 2024 года
+         * получить его иначе нельзя. Не секрет.
          */
         @DefaultValue("") String key,
 
-        /** Grants access to the authorising account's boards. This one is a secret. */
+        /** Даёт доступ к доскам авторизовавшей учётной записи. Вот это уже секрет. */
         @DefaultValue("") String token,
 
         @DefaultValue("5s") Duration connectTimeout,
 
         @DefaultValue("10s") Duration readTimeout,
 
-        /** How long a board's list-name to list-id mapping is trusted before refetching. */
+        /** Сколько мы доверяем соответствию «имя списка → id списка» до повторного запроса. */
         @DefaultValue("10m") Duration listCacheTtl,
 
         /**
-         * Bitbucket login to Trello username. Needed because the same person is
-         * usually spelled differently in the two systems -- a Latin login against a
-         * Cyrillic display name -- so no amount of fuzzy matching finds them.
-         * Anyone absent here, or absent from the board, simply leaves the card
-         * unassigned.
+         * Логин Bitbucket → имя пользователя Trello. Нужно потому, что один и тот же
+         * человек обычно записан в двух системах по-разному — латинский логин против
+         * кириллического отображаемого имени, — и никакое нечёткое сопоставление их не
+         * свяжет. Тот, кого здесь нет (или нет на доске), просто оставляет карточку без
+         * исполнителя.
          */
         @DefaultValue Map<String, String> members,
 
         @DefaultValue Reconciliation reconciliation) {
 
     /**
-     * Catches what a one-way sync cannot see: a card someone dragged by hand or
-     * deleted outright. This is the only reason to read from Trello at all -- and it
-     * has to be polling, because Trello webhooks need a callback URL Trello can
-     * reach, which an internal host is not.
+     * Ловит то, чего односторонняя синхронизация не видит: карточку, которую кто-то
+     * перетащил руками или удалил совсем. Это единственная причина вообще читать из
+     * Trello — и делать это приходится опросом, потому что вебхукам Trello нужен
+     * callback-URL, до которого Trello достучится, а внутренний хост таким не является.
      */
     public record Reconciliation(
 
@@ -53,17 +53,17 @@ public record TrelloProperties(
 
             @DefaultValue("15m") Duration interval,
 
-            /** Default is to report, not to fight the person who moved the card. */
+            /** По умолчанию — сообщить, а не бороться с человеком, переместившим карточку. */
             @DefaultValue("log") OnDrift onDrift,
 
             @DefaultValue("log") OnMissing onMissing) {
 
         public enum OnDrift {
 
-            /** Report the difference and leave the card where the human put it. */
+            /** Сообщить о расхождении и оставить карточку там, куда её положил человек. */
             LOG,
 
-            /** Queue a move back to where our state says the card belongs. */
+            /** Поставить в очередь возврат туда, где карточке место по нашему состоянию. */
             RESTORE
         }
 
@@ -71,7 +71,7 @@ public record TrelloProperties(
 
             LOG,
 
-            /** Forget the card id, so the next event for that PR creates a fresh card. */
+            /** Забыть id карточки, чтобы следующее событие по этому PR создало новую. */
             FORGET
         }
     }

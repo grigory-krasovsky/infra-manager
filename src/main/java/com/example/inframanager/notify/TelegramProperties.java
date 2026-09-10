@@ -10,8 +10,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record TelegramProperties(
 
         /**
-         * When false the sender bean is not registered at all, so queued messages land
-         * in SKIPPED and stay visible in {@code outbound_task} instead of vanishing.
+         * При false бин отправителя вообще не регистрируется, поэтому поставленные в
+         * очередь сообщения оседают в SKIPPED и остаются видны в {@code outbound_task},
+         * а не исчезают.
          */
         @DefaultValue("false") boolean enabled,
 
@@ -21,20 +22,20 @@ public record TelegramProperties(
 
         @DefaultValue("5s") Duration connectTimeout,
 
-        /** Kept short: the worker holds a row lock for the duration of the call. */
+        /** Держим коротким: воркер удерживает блокировку строки на всё время вызова. */
         @DefaultValue("10s") Duration readTimeout,
 
         @DefaultValue List<Route> routes) {
 
-    /** Where a notification goes, and which stands it cares about. */
+    /** Куда уходит уведомление и какие стенды ему интересны. */
     public record Route(
 
             String chatId,
 
-            /** Topic id inside a forum-style supergroup. Null for a plain chat. */
+            /** Id топика внутри супергруппы-форума. Null для обычного чата. */
             Integer messageThreadId,
 
-            /** Empty means every environment. */
+            /** Пусто означает «все окружения». */
             @DefaultValue List<String> environments) {
 
         public boolean matches(String environment) {

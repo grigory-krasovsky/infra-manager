@@ -14,20 +14,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Turns label names into the ids Trello wants, creating any that do not exist yet.
+ * Превращает имена меток в id, которых требует Trello, создавая те, которых ещё нет.
  *
- * <p>Created rather than required up front because the values are discovered, not
- * configured: a new target branch or a new contributor should appear on the board
- * without anyone editing configuration first.
+ * <p>Создаём, а не требуем заранее, потому что значения обнаруживаются, а не
+ * настраиваются: новая целевая ветка или новый участник должны появиться на доске без
+ * того, чтобы кто-то сперва правил конфигурацию.
  *
- * <p>Colour is derived from the name, so the same branch keeps the same colour
- * across boards and restarts instead of depending on creation order.
+ * <p>Цвет выводится из имени, поэтому одна и та же ветка сохраняет один цвет на разных
+ * досках и после перезапусков, а не зависит от порядка создания.
  */
 public class TrelloLabelResolver {
 
     private static final Logger log = LoggerFactory.getLogger(TrelloLabelResolver.class);
 
-    /** Trello's label palette. Order matters only in that it must stay stable. */
+    /** Палитра меток Trello. Порядок важен лишь тем, что он должен оставаться неизменным. */
     private static final List<String> COLORS = List.of(
             "green", "yellow", "orange", "red", "purple", "blue", "sky", "lime", "pink", "black");
 
@@ -43,8 +43,8 @@ public class TrelloLabelResolver {
     }
 
     /**
-     * @param names label names, in display form; blanks and duplicates are dropped
-     * @return ids of the corresponding labels, creating any that are missing
+     * @param names имена меток в отображаемом виде; пустые и повторы отбрасываются
+     * @return id соответствующих меток; недостающие создаются
      */
     public List<String> labelIds(String boardId, List<String> names) {
         Set<String> wanted = new LinkedHashSet<>(names.stream()
@@ -60,7 +60,7 @@ public class TrelloLabelResolver {
         for (String name : wanted) {
             String id = byName.get(normalise(name));
             if (id == null) {
-                // Could be a label somebody added since the cache was filled.
+                // Возможно, метку кто-то добавил уже после заполнения кеша.
                 byName = labels(boardId, true);
                 id = byName.get(normalise(name));
             }
@@ -86,7 +86,7 @@ public class TrelloLabelResolver {
             invalidate(boardId);
             return created.id();
         } catch (Exception e) {
-            // A missing label is cosmetic; failing the card over it would be worse.
+            // Отсутствие метки — косметика; уронить из-за неё карточку было бы хуже.
             log.warn("Could not create Trello label '{}' on board {}", name, boardId, e);
             return null;
         }
@@ -113,7 +113,7 @@ public class TrelloLabelResolver {
         return new CachedLabels(byName, Instant.now());
     }
 
-    /** Stable across restarts: same name, same colour. */
+    /** Устойчиво к перезапускам: одно имя — один цвет. */
     static String colorFor(String name) {
         int hash = normalise(name).hashCode();
         return COLORS.get(Math.floorMod(hash, COLORS.size()));
