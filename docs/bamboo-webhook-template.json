@@ -1,0 +1,13 @@
+{
+  "deploymentResultId": ${deploymentResultId},
+  "status": "${status}",
+  "deploymentProjectId": ${deploymentProjectId},
+  "deploymentProjectName": "${deploymentProjectName}",
+  "environmentId": ${environmentId},
+  "environmentName": "${environmentName}",
+  "deploymentVersionId": ${deploymentVersionId},
+  "deploymentVersionName": "${deploymentVersionName}",
+  "startedAt": "${startedAt}",
+  "finishedAt": "${finishedAt}",
+  "triggerSentence": "${triggerSentence}"
+}

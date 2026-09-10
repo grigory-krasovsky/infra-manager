@@ -43,3 +43,115 @@ management:
 logging:
   level:
     com.example.inframanager: ${LOG_LEVEL:INFO}
+
+infra-manager:
+  bamboo:
+    # none | webhook | poll. Stays "none" until Bamboo is wired up, so the service
+    # starts without any Bamboo credentials. See docs/runbook.md.
+    source: ${BAMBOO_SOURCE:none}
+    base-url: ${BAMBOO_BASE_URL:}
+    token: ${BAMBOO_TOKEN:}
+    webhook-secret: ${BAMBOO_WEBHOOK_SECRET:}
+    # Only needed if the webhook template cannot render a project name.
+    #   project-names:
+    #     "12345": INFRA
+    poll:
+      interval: 60s
+      max-results: 10
+      # Required when source=poll.
+      #   environments:
+      #     - id: 12345
+      #       project-name: INFRA
+      #       environment-name: STAGE
+      environments: []
+
+  telegram:
+    # Off until a bot token exists. While off, notifications are still queued and
+    # then marked SKIPPED, so the gap is visible in outbound_task.
+    enabled: ${TELEGRAM_ENABLED:false}
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    # Chat ids are environment-specific, so they belong in the mounted config file
+    # rather than here. See docs/runbook.md for how to find one.
+    #   routes:
+    #     - chat-id: "-1001234567890"
+    #       environments: [STAGE, PROD]   # omit or leave empty for every stand
+    #     - chat-id: "-1009876543210"
+    #       message-thread-id: 42         # topic inside a forum supergroup
+    routes: []
+
+  bitbucket:
+    # Exposes /webhooks/bitbucket. Requires BITBUCKET_WEBHOOK_SECRET when on.
+    enabled: ${BITBUCKET_ENABLED:false}
+    base-url: ${BITBUCKET_BASE_URL:}
+    # Only needed when the container reaches Bitbucket at a different address than
+    # a human does -- the card links use this one.
+    browse-url: ${BITBUCKET_BROWSE_URL:}
+    token: ${BITBUCKET_TOKEN:}
+    webhook-secret: ${BITBUCKET_WEBHOOK_SECRET:}
+
+  jira:
+    # Purely cosmetic: supplies the issue summary for card titles. With it off,
+    # cards are titled from the pull request alone. Jira does not drive the
+    # lifecycle -- pull requests and deployments do.
+    enabled: ${JIRA_ENABLED:false}
+    base-url: ${JIRA_BASE_URL:}
+    token: ${JIRA_TOKEN:}
+
+  trello:
+    # While off, card updates are queued and marked SKIPPED, not dropped.
+    enabled: ${TRELLO_ENABLED:false}
+    key: ${TRELLO_KEY:}
+    token: ${TRELLO_TOKEN:}
+    reconciliation:
+      # Catches cards dragged or deleted by hand -- the one thing a one-way sync
+      # cannot otherwise see. Trello webhooks are not an option: Trello has to be
+      # able to reach the callback URL, and an internal host is not reachable.
+      enabled: ${TRELLO_RECONCILIATION_ENABLED:false}
+      interval: 15m
+      # log = report and adopt what Trello says; restore = move the card back.
+      on-drift: log
+      # log = report; forget = drop the card id so the next event creates a new card.
+      on-missing: log
+
+  lifecycle:
+    # Which repository mirrors to which board. Board ids are deployment-specific,
+    # so this belongs in the mounted config file.
+    #   repos:
+    #     - project-key: INFRA
+    #       repo-slug: backend
+    #       trello-board-id: "5f2b..."
+    repos: []
+    # List names must exist on the board; a missing one fails loudly rather than
+    # silently leaving the card put. Events not listed here refresh the card's
+    # content without moving it -- that is what pr:modified should do.
+    event-to-list:
+      - event: "pr:opened"
+        list: Review
+      - event: "pr:reviewer:changes_requested"
+        list: Changes requested
+      - event: "pr:reviewer:unapproved"
+        list: Review
+      - event: "pr:reviewer:approved"
+        list: Approved
+      - event: "pr:merged"
+        list: Merged
+      - event: "pr:declined"
+        list: Declined
+    # New commits send an approved card back to the review column.
+    reopen-on-new-commits: true
+
+  workers:
+    # Values below match the code defaults; listed so they are discoverable.
+    scheduling-enabled: true
+    inbound:
+      poll-interval: 2s
+      batch-size: 20
+      max-attempts: 8
+      base-backoff: 5s
+      max-backoff: 10m
+    outbound:
+      poll-interval: 2s
+      batch-size: 20
+      max-attempts: 8
+      base-backoff: 5s
+      max-backoff: 10m
