@@ -58,7 +58,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "infra-manager.jira.token=jira-token",
         "infra-manager.lifecycle.repos[0].project-key=INFRA",
         "infra-manager.lifecycle.repos[0].repo-slug=backend",
-        "infra-manager.lifecycle.repos[0].trello-board-id=board-1"
+        "infra-manager.lifecycle.repos[0].trello-board-id=board-1",
+        "infra-manager.lifecycle.repos[0].prefix=BACK",
+        // Declared here rather than inherited from application.yaml: column names are
+        // whatever a given board happens to use, and renaming one must not break tests.
+        "infra-manager.lifecycle.event-to-list[0].event=pr:opened",
+        "infra-manager.lifecycle.event-to-list[0].list=Review",
+        "infra-manager.lifecycle.event-to-list[1].event=pr:reviewer:approved",
+        "infra-manager.lifecycle.event-to-list[1].list=Approved",
+        "infra-manager.lifecycle.event-to-list[2].event=pr:merged",
+        "infra-manager.lifecycle.event-to-list[2].list=Merged",
+        "infra-manager.lifecycle.event-to-list[3].event=pr:declined",
+        "infra-manager.lifecycle.event-to-list[3].list=Declined",
+        "infra-manager.lifecycle.default-list=Review"
 })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
@@ -112,7 +124,7 @@ class BitbucketPrFlowTest {
                 ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
         verify(trelloClient).createCard(eq("test-key"), eq("test-token"), request.capture());
         assertThat(request.getValue().idList()).isEqualTo("list-review");
-        assertThat(request.getValue().name()).isEqualTo("PR #42 · Fix the thing");
+        assertThat(request.getValue().name()).isEqualTo("BACK Fix the thing");
         assertThat(request.getValue().desc())
                 .contains("https://bitbucket.local/projects/INFRA/repos/backend/pull-requests/42")
                 .contains("INFRA/backend")
@@ -155,7 +167,7 @@ class BitbucketPrFlowTest {
                 ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
         verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
         assertThat(request.getValue().idList()).isNull();
-        assertThat(request.getValue().name()).isEqualTo("PR #44 · New title");
+        assertThat(request.getValue().name()).isEqualTo("BACK New title");
     }
 
     @Test
@@ -261,7 +273,7 @@ class BitbucketPrFlowTest {
         ArgumentCaptor<TrelloClient.CreateCardRequest> request =
                 ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
         verify(trelloClient).createCard(anyString(), anyString(), request.capture());
-        assertThat(request.getValue().name()).isEqualTo("[PROJ-100] Починить деплой на STAGE (PR #60)");
+        assertThat(request.getValue().name()).isEqualTo("BACK · [PROJ-100] Починить деплой на STAGE");
 
         assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 60))
                 .hasValueSatisfying(link -> assertThat(link.getIssueKey()).isEqualTo("PROJ-100"));
@@ -279,7 +291,7 @@ class BitbucketPrFlowTest {
                 ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
         verify(trelloClient).createCard(anyString(), anyString(), request.capture());
         // The key is still known from the branch, only the summary is missing.
-        assertThat(request.getValue().name()).isEqualTo("[PROJ-101] PR #61 · fix stuff");
+        assertThat(request.getValue().name()).isEqualTo("BACK · [PROJ-101] fix stuff");
         assertThat(inboundEvents.findAll())
                 .allSatisfy(e -> assertThat(e.getStatus()).isEqualTo(ProcessingStatus.DONE));
     }

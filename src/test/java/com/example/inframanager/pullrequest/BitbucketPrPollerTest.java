@@ -151,7 +151,37 @@ class BitbucketPrPollerTest {
         given(pr(10, "OPEN", 2, "commit-b", List.of(reviewer("ivan", "UNAPPROVED", false))));
         poller.runOnce();
 
-        assertThat(eventTypes()).containsExactly("pr:opened", "pr:from_ref_updated");
+        // First sight reports the approval, not a plain open -- see the tests below.
+        assertThat(eventTypes()).containsExactly("pr:reviewer:approved", "pr:from_ref_updated");
+    }
+
+    @Test
+    void firstSightOfAnAlreadyApprovedPullRequestReportsTheApproval() {
+        // Otherwise a restart, or any reset of the snapshots, would drag every open
+        // card back to the review column regardless of where review had got to.
+        given(pr(20, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "APPROVED", true))));
+
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:reviewer:approved");
+    }
+
+    @Test
+    void firstSightOfAPullRequestNeedingWorkReportsChangesRequested() {
+        given(pr(21, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "NEEDS_WORK", false))));
+
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:reviewer:changes_requested");
+    }
+
+    @Test
+    void firstSightOfAnUnreviewedPullRequestIsStillJustOpened() {
+        given(pr(22, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "UNAPPROVED", false))));
+
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:opened");
     }
 
     @Test

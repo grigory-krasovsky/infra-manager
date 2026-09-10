@@ -31,5 +31,18 @@ public record TrelloCardCommand(
         /** Recorded on the link when known; null when the branch carries no key. */
         String issueKey,
 
+        /**
+         * Label names, created on the board if absent. Null leaves whatever labels
+         * the card already has alone -- which is what reconciliation wants.
+         */
+        java.util.List<String> labels,
+
+        /**
+         * Identifiers of the author, most specific first. Matched against existing
+         * board members; unlike labels, members cannot be created, so an author with
+         * no Trello account simply leaves the card unassigned.
+         */
+        java.util.List<String> memberCandidates,
+
         boolean archive) {
 }

@@ -159,6 +159,14 @@ infra-manager:
     enabled: ${TRELLO_ENABLED:false}
     key: ${TRELLO_KEY:}
     token: ${TRELLO_TOKEN:}
+    # Логин в Bitbucket → имя пользователя в Trello. Нужен только там, где человек
+    # записан в двух системах по-разному. Сначала пробуется совпадение по username
+    # и по полному имени, и если аккаунт в Trello заведён под тем же логином, что и
+    # в Bitbucket, запись здесь не нужна. Проверяется раньше автоматического
+    # сравнения, поэтому лишняя строка уведёт карточки не на тот аккаунт.
+    #   members:
+    #     gurov: roman-gurov
+    members: {}
     reconciliation:
       # Catches cards dragged or deleted by hand -- the one thing a one-way sync
       # cannot otherwise see. Trello webhooks are not an option: Trello has to be
@@ -173,40 +181,47 @@ infra-manager:
   lifecycle:
     # Which repository mirrors to which board. Board ids are deployment-specific,
     # so this belongs in the mounted config file.
-    # trello-board-id пока заглушка: доска ещё не заведена. Пока Trello выключен,
-    # задачи на карточки уходят в SKIPPED, так что значение ни на что не влияет.
-    # После настройки Trello подставить настоящие id и очистить pr_poll_state,
-    # чтобы следующий проход пересоздал карточки для всех открытых PR.
+    # Все четыре репозитория зеркалятся на одну доску «Задачи и PR'ы»: карточка
+    # несёт имя репозитория в описании, а на бесплатном тарифе Trello доска —
+    # ограниченный ресурс (10 на рабочее пространство).
+    # prefix — то, что стоит в начале заголовка карточки. Одна задача штатно
+    # порождает два PR (фронт и бэк), и различать их надо именно по проекту.
     repos:
       - project-key: LIZA
         repo-slug: liza
-        trello-board-id: TODO
+        prefix: LIZA
+        trello-board-id: "6aa25c1a2a2039431f2fc528"
       - project-key: LIZA
         repo-slug: liza-rest-api
-        trello-board-id: TODO
+        prefix: LIZA-API
+        trello-board-id: "6aa25c1a2a2039431f2fc528"
       - project-key: ORVD
         repo-slug: orvd
-        trello-board-id: TODO
+        prefix: ЦСВ
+        trello-board-id: "6aa25c1a2a2039431f2fc528"
       - project-key: ORVD
         repo-slug: anccopier
-        trello-board-id: TODO
+        prefix: anccopier
+        trello-board-id: "6aa25c1a2a2039431f2fc528"
     # List names must exist on the board; a missing one fails loudly rather than
     # silently leaving the card put. Events not listed here refresh the card's
     # content without moving it -- that is what pr:modified should do.
     event-to-list:
       - event: "pr:opened"
-        list: Review
+        list: Ревью
       - event: "pr:reviewer:changes_requested"
-        list: Changes requested
+        list: Запрошены изменения
       - event: "pr:reviewer:unapproved"
-        list: Review
+        list: Ревью
       - event: "pr:reviewer:approved"
-        list: Approved
+        list: Аппрув
       - event: "pr:merged"
-        list: Merged
+        list: Влито в ветку
       - event: "pr:declined"
-        list: Declined
-    # New commits send an approved card back to the review column.
+        list: Отклонено
+    # Куда попадает карточка, если pr:opened не сопоставлен колонке.
+    default-list: Ревью
+    # Новые коммиты возвращают одобренную карточку обратно в ревью.
     reopen-on-new-commits: true
 
   workers:

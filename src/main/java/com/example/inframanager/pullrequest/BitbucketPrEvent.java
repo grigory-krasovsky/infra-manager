@@ -6,11 +6,11 @@ import java.util.Optional;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
- * The parts of a Bitbucket Data Center pull request webhook payload we care about.
+ * Те части webhook-payload'а Bitbucket Data Center о пул-реквесте, которые нам нужны.
  *
- * <p>Everything is nullable in practice: the shape varies a little between event
- * kinds and between Bitbucket versions, and a missing field should degrade the card,
- * not fail the delivery.
+ * <p>На практике null может прийти в любом поле: форма payload'а немного меняется от
+ * типа события и от версии Bitbucket, а отсутствующее поле должно ухудшить карточку,
+ * а не сорвать доставку.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullRequest) {
@@ -21,7 +21,7 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record PullRequest(long id, String title, String description, String state,
-                              /** Bumped by Bitbucket on any edit; the polling path uses it to spot changes. */
+                              /** Bitbucket увеличивает его при любой правке; поллинг по нему замечает изменения. */
                               Integer version,
                               Long updatedDate,
                               Ref fromRef, Ref toRef, Author author, List<Reviewer> reviewers, Links links) {
@@ -29,7 +29,7 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Ref(String id, String displayId,
-                      /** Head of the branch; a change means new commits were pushed. */
+                      /** Голова ветки; её смена означает, что запушили новые коммиты. */
                       String latestCommit,
                       Repository repository) {
     }
@@ -139,6 +139,14 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
 
     public String targetBranch() {
         return pullRequest == null || pullRequest.toRef() == null ? null : pullRequest.toRef().displayId();
+    }
+
+    /** Bitbucket login, which is the less ambiguous way to identify a person. */
+    public String authorLogin() {
+        if (pullRequest == null || pullRequest.author() == null || pullRequest.author().user() == null) {
+            return null;
+        }
+        return pullRequest.author().user().name();
     }
 
     public String authorName() {

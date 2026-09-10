@@ -1,6 +1,7 @@
 package com.example.inframanager.trello;
 
 import java.time.Duration;
+import java.util.List;
 
 import com.example.inframanager.outbound.OutboundTarget;
 import com.example.inframanager.outbound.OutboundTask;
@@ -30,17 +31,23 @@ public class TrelloSender implements OutboundTaskSender {
 
     private final TrelloClient client;
     private final TrelloListResolver listResolver;
+    private final TrelloLabelResolver labelResolver;
+    private final TrelloMemberResolver memberResolver;
     private final TrelloProperties properties;
     private final PrCardLinkRepository linkRepository;
     private final ObjectMapper objectMapper;
 
     public TrelloSender(TrelloClient client,
                         TrelloListResolver listResolver,
+                        TrelloLabelResolver labelResolver,
+                        TrelloMemberResolver memberResolver,
                         TrelloProperties properties,
                         PrCardLinkRepository linkRepository,
                         ObjectMapper objectMapper) {
         this.client = client;
         this.listResolver = listResolver;
+        this.labelResolver = labelResolver;
+        this.memberResolver = memberResolver;
         this.properties = properties;
         this.linkRepository = linkRepository;
         this.objectMapper = objectMapper;
@@ -83,10 +90,34 @@ public class TrelloSender implements OutboundTaskSender {
         String listId = listResolver.listId(command.boardId(), listName);
 
         TrelloClient.TrelloCard card = client.createCard(properties.key(), properties.token(),
-                new TrelloClient.CreateCardRequest(listId, command.title(), command.description(), "top"));
+                new TrelloClient.CreateCardRequest(listId, command.title(), command.description(), "top",
+                        labelIds(command), memberIds(command)));
 
         link.recordCard(card.id(), listId, false);
         log.info("Created Trello card {} for {} in list '{}'", card.id(), command.pullRequest().asKey(), listName);
+    }
+
+    /**
+     * @return comma-separated label ids, or null to leave the card's labels untouched
+     */
+    private String labelIds(TrelloCardCommand command) {
+        if (command.labels() == null || command.labels().isEmpty()) {
+            return null;
+        }
+        List<String> ids = labelResolver.labelIds(command.boardId(), command.labels());
+        return ids.isEmpty() ? null : String.join(",", ids);
+    }
+
+    /**
+     * @return comma-separated member ids, or null to leave the card's members alone.
+     *         An author with no Trello account resolves to nothing, which is expected.
+     */
+    private String memberIds(TrelloCardCommand command) {
+        if (command.memberCandidates() == null || command.memberCandidates().isEmpty()) {
+            return null;
+        }
+        List<String> ids = memberResolver.memberIds(command.boardId(), command.memberCandidates());
+        return ids.isEmpty() ? null : String.join(",", ids);
     }
 
     private void updateCard(TrelloCardCommand command, PrCardLink link) {
@@ -95,7 +126,8 @@ public class TrelloSender implements OutboundTaskSender {
                 : listResolver.listId(command.boardId(), command.moveToListName());
 
         client.updateCard(link.getTrelloCardId(), properties.key(), properties.token(),
-                new TrelloClient.UpdateCardRequest(listId, command.title(), command.description(), command.archive()));
+                new TrelloClient.UpdateCardRequest(listId, command.title(), command.description(),
+                        command.archive(), labelIds(command), memberIds(command)));
 
         link.recordCard(link.getTrelloCardId(),
                 listId != null ? listId : link.getCurrentListId(),

@@ -1,6 +1,7 @@
 package com.example.inframanager.pullrequest;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -18,25 +19,56 @@ public class PrCardContentRenderer {
         this.properties = properties;
     }
 
+    /** Leading "2026 08 19", "2026-08-19", "19.08.2026" and similar. */
+    private static final Pattern LEADING_DATE = Pattern.compile(
+            "^(\\d{4}[-_. ]\\d{2}[-_. ]\\d{2}|\\d{2}[-_. ]\\d{2}[-_. ]\\d{4})[-_.: ]*");
+
+    private static final Pattern LEADING_SEPARATORS = Pattern.compile("^[-_.:\\s]+");
+
     /**
+     * Builds the card title.
+     *
+     * <p>Shape is {@code PREFIX · [KEY] what it is}, dropping either bracket group
+     * when it is unknown. The prefix identifies the repository, since one task
+     * routinely produces a front-end and a back-end pull request and the board mixes
+     * several repositories. Everything else is noise: branch names carry the date and
+     * the issue key, both of which would otherwise appear twice.
+     *
      * @param issueKey     Jira key found in the branch or title, or null
      * @param issueSummary what Jira calls that issue, or null when Jira is off,
      *                     unreachable, or does not know the key
      */
-    public String title(BitbucketPrEvent event, PullRequestRef ref, String issueKey, String issueSummary) {
-        String prTitle = event.pullRequest() == null || !StringUtils.hasText(event.pullRequest().title())
+    public String title(BitbucketPrEvent event, LifecycleProperties.RepoBoard repo,
+                        String issueKey, String issueSummary) {
+        String rawTitle = event.pullRequest() == null || !StringUtils.hasText(event.pullRequest().title())
                 ? "(без заголовка)"
                 : event.pullRequest().title();
 
-        if (StringUtils.hasText(issueKey) && StringUtils.hasText(issueSummary)) {
-            // The PR number stays in the title because a card is a pull request, not
-            // an issue: two pull requests for one issue must not look identical.
-            return "[%s] %s (PR #%d)".formatted(issueKey, issueSummary, ref.prId());
-        }
+        // A Jira summary already describes the task properly; the branch-derived
+        // title is only a fallback and needs the noise stripped.
+        String subject = StringUtils.hasText(issueSummary) ? issueSummary : cleanTitle(rawTitle, issueKey);
+
+        String head = StringUtils.hasText(issueKey)
+                ? "%s · [%s]".formatted(repo.displayPrefix(), issueKey)
+                : repo.displayPrefix();
+        return "%s %s".formatted(head, subject);
+    }
+
+    /**
+     * Strips the leading date and the issue key from a branch-derived pull request
+     * title, so "2026 08 19 ORVD-1047 BusinessProcess Copy Test" reads as
+     * "BusinessProcess Copy Test".
+     */
+    static String cleanTitle(String title, String issueKey) {
+        String cleaned = LEADING_DATE.matcher(title.trim()).replaceFirst("");
         if (StringUtils.hasText(issueKey)) {
-            return "[%s] PR #%d · %s".formatted(issueKey, ref.prId(), prTitle);
+            cleaned = cleaned.replaceAll("(?i)" + Pattern.quote(issueKey), " ");
         }
-        return "PR #%d · %s".formatted(ref.prId(), prTitle);
+        cleaned = LEADING_SEPARATORS.matcher(cleaned).replaceFirst("");
+        cleaned = cleaned.replaceAll("\\s{2,}", " ").trim();
+        // Stripping everything means the title was only a date and a key; keeping the
+        // original beats an empty card name.
+        return cleaned.isEmpty() ? title.trim() : cleaned;
     }
 
     public String description(BitbucketPrEvent event, PullRequestRef ref) {

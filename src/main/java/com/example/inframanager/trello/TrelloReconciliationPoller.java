@@ -110,8 +110,11 @@ public class TrelloReconciliationPoller {
                 link.getTrelloBoardId(),
                 expected,
                 expected,
-                // Title and description stay null so the card's content is untouched;
-                // UpdateCardRequest omits nulls, making this a pure move.
+                // Title, description, labels and members stay null so the card's
+                // content is untouched; UpdateCardRequest omits nulls, making this a
+                // pure move.
+                null,
+                null,
                 null,
                 null,
                 null,

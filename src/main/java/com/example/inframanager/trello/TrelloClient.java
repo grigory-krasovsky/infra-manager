@@ -32,6 +32,24 @@ public interface TrelloClient {
                     @RequestParam("key") String key,
                     @RequestParam("token") String token);
 
+    @GetExchange("/1/boards/{boardId}/labels")
+    List<TrelloLabel> boardLabels(@PathVariable String boardId,
+                                  @RequestParam("key") String key,
+                                  @RequestParam("token") String token,
+                                  @RequestParam("limit") int limit);
+
+    @GetExchange("/1/boards/{boardId}/members")
+    List<TrelloMember> boardMembers(@PathVariable String boardId,
+                                    @RequestParam("key") String key,
+                                    @RequestParam("token") String token);
+
+    @PostExchange("/1/labels")
+    TrelloLabel createLabel(@RequestParam("key") String key,
+                            @RequestParam("token") String token,
+                            @RequestParam("idBoard") String boardId,
+                            @RequestParam("name") String name,
+                            @RequestParam("color") String color);
+
     @PostExchange("/1/cards")
     TrelloCard createCard(@RequestParam("key") String key,
                           @RequestParam("token") String token,
@@ -51,11 +69,22 @@ public interface TrelloClient {
     record TrelloCard(String id, String name, String idList, boolean closed) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TrelloLabel(String id, String name, String color) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TrelloMember(String id, String username, String fullName) {
+    }
+
+    /** {@code idLabels} and {@code idMembers} are comma-separated, as Trello expects. */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    record CreateCardRequest(String idList, String name, String desc, String pos) {
+    record CreateCardRequest(String idList, String name, String desc, String pos,
+                             String idLabels, String idMembers) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    record UpdateCardRequest(String idList, String name, String desc, Boolean closed) {
+    record UpdateCardRequest(String idList, String name, String desc, Boolean closed,
+                             String idLabels, String idMembers) {
     }
 }

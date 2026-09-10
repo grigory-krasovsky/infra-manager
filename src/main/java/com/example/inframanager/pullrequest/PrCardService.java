@@ -1,5 +1,7 @@
 package com.example.inframanager.pullrequest;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import com.example.inframanager.event.EventSource;
@@ -13,6 +15,7 @@ import com.example.inframanager.trello.TrelloCardCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -88,9 +91,11 @@ public class PrCardService implements InboundEventHandler {
                 board.get().trelloBoardId(),
                 lifecycle.listFor(eventKey).orElse(null),
                 lifecycle.createInList(),
-                renderer.title(parsed, ref, issueKey, issueSummary),
+                renderer.title(parsed, board.get(), issueKey, issueSummary),
                 renderer.description(parsed, ref),
                 issueKey,
+                labelsFor(parsed),
+                authorCandidates(parsed),
                 archive);
 
         // Keyed on the inbound event, so replaying that event does not queue a second
@@ -101,5 +106,31 @@ public class PrCardService implements InboundEventHandler {
 
         log.info("Queued card sync for {} after {}{}", ref.asKey(), eventKey,
                 command.moveToListName() == null ? " (content only)" : " -> '" + command.moveToListName() + "'");
+    }
+
+    /**
+     * Where the change is headed. Only that: the repository is already the title's
+     * prefix, and the author is a card member rather than a label -- an avatar reads
+     * faster than a coloured chip, and Trello's ten-colour palette runs out of
+     * distinct colours long before a team does.
+     */
+    private List<String> labelsFor(BitbucketPrEvent event) {
+        List<String> labels = new ArrayList<>();
+        if (StringUtils.hasText(event.targetBranch())) {
+            labels.add(event.targetBranch());
+        }
+        return labels;
+    }
+
+    /** Login first, then display name: the login is the less ambiguous of the two. */
+    private List<String> authorCandidates(BitbucketPrEvent event) {
+        List<String> candidates = new ArrayList<>();
+        if (StringUtils.hasText(event.authorLogin())) {
+            candidates.add(event.authorLogin());
+        }
+        if (StringUtils.hasText(event.authorName())) {
+            candidates.add(event.authorName());
+        }
+        return candidates;
     }
 }

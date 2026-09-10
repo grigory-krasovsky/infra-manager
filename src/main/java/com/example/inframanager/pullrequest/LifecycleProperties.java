@@ -36,7 +36,17 @@ public record LifecycleProperties(
         /** Where a card is created if {@code pr:opened} is not mapped. */
         @DefaultValue("Review") String defaultList) {
 
-    public record RepoBoard(String projectKey, String repoSlug, String trelloBoardId) {
+    /**
+     * @param prefix short name shown at the front of the card title. Several
+     *               repositories share one board, and one task routinely produces two
+     *               pull requests -- front and back -- so the prefix is what keeps
+     *               their cards apart. Falls back to the slug when unset.
+     */
+    public record RepoBoard(String projectKey, String repoSlug, String trelloBoardId, String prefix) {
+
+        public String displayPrefix() {
+            return prefix == null || prefix.isBlank() ? repoSlug : prefix;
+        }
 
         boolean matches(PullRequestRef ref) {
             return projectKey.equalsIgnoreCase(ref.projectKey())

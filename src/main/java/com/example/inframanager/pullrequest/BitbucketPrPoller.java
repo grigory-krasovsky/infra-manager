@@ -129,7 +129,13 @@ public class BitbucketPrPoller {
         String state = snapshot.state();
 
         if (previous == null) {
-            return "OPEN".equalsIgnoreCase(state) ? "pr:opened" : null;
+            if (!"OPEN".equalsIgnoreCase(state)) {
+                return null;
+            }
+            // Not blindly pr:opened: an open pull request already has a review status,
+            // and reporting it as freshly opened would drop a card that is sitting in
+            // "changes requested" back into the review column.
+            return currentReviewEvent(snapshot);
         }
 
         if (!Objects.equals(previous.getState(), state)) {
@@ -192,6 +198,14 @@ public class BitbucketPrPoller {
                 String.valueOf(pullRequest.state()), String.valueOf(pullRequest.version()),
                 String.valueOf(snapshot.latestCommit()), String.valueOf(snapshot.reviewerDigest()));
         return "poll:" + sha256(fingerprint);
+    }
+
+    /** Where an open pull request belongs right now, judged only by its reviewers. */
+    private String currentReviewEvent(BitbucketPrEvent snapshot) {
+        if (snapshot.hasChangesRequested()) {
+            return "pr:reviewer:changes_requested";
+        }
+        return snapshot.hasApproval() ? "pr:reviewer:approved" : "pr:opened";
     }
 
     private static boolean changed(String previous, String current) {

@@ -1,6 +1,7 @@
 package com.example.inframanager.trello;
 
 import java.time.Duration;
+import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -28,6 +29,15 @@ public record TrelloProperties(
 
         /** How long a board's list-name to list-id mapping is trusted before refetching. */
         @DefaultValue("10m") Duration listCacheTtl,
+
+        /**
+         * Bitbucket login to Trello username. Needed because the same person is
+         * usually spelled differently in the two systems -- a Latin login against a
+         * Cyrillic display name -- so no amount of fuzzy matching finds them.
+         * Anyone absent here, or absent from the board, simply leaves the card
+         * unassigned.
+         */
+        @DefaultValue Map<String, String> members,
 
         @DefaultValue Reconciliation reconciliation) {
 
