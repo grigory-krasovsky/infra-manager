@@ -52,18 +52,66 @@ infra-manager:
     base-url: ${BAMBOO_BASE_URL:}
     token: ${BAMBOO_TOKEN:}
     webhook-secret: ${BAMBOO_WEBHOOK_SECRET:}
+    # Deployments that finished longer ago than this are recorded but not sent to
+    # Telegram. Without it the first poll announces every historical result Bamboo
+    # still returns -- ten per environment -- and so does the first poll after any
+    # long outage.
+    max-notification-age: 1h
     # Only needed if the webhook template cannot render a project name.
     #   project-names:
     #     "12345": INFRA
     poll:
       interval: 60s
       max-results: 10
-      # Required when source=poll.
-      #   environments:
-      #     - id: 12345
-      #       project-name: INFRA
-      #       environment-name: STAGE
-      environments: []
+      # id -- Bamboo's environment id, not the deployment project id.
+      # project-name / environment-name are what appear in the Telegram message:
+      #   "✅ Лиза API задеплоен на prod"
+      # Bamboo's own names bake the stand into the project ("Лиза - dev",
+      # "Deployment for Лиза API Prod"), which would read as "Лиза - dev
+      # задеплоен на dev", so they are split into service and stand here.
+      environments:
+        - id: 18710530
+          project-name: Лиза API
+          environment-name: prod
+        - id: 18710529
+          project-name: Лиза API
+          environment-name: test
+        # Bamboo calls this environment "api-elbrus-dev"; the "api-" is already
+        # in the project name.
+        - id: 23887875
+          project-name: Лиза API
+          environment-name: elbrus-dev
+        # From the project "Лиза - rest-api-dev" -- assumed to be the same
+        # service as "Лиза API". Correct this if it is a separate one.
+        - id: 16875521
+          project-name: Лиза API
+          environment-name: dev
+
+        - id: 18710532
+          project-name: Лиза
+          environment-name: prod
+        - id: 18710531
+          project-name: Лиза
+          environment-name: test
+        - id: 16875522
+          project-name: Лиза
+          environment-name: dev
+        # Bamboo calls this environment "app-elbrus-dev".
+        - id: 23887876
+          project-name: Лиза
+          environment-name: elbrus-dev
+
+        - id: 1736705
+          project-name: ОрВД
+          environment-name: dev
+        # These two look like JDK variants rather than stands, and the token's
+        # account cannot execute them. Uncomment if they are real deployments.
+        #  - id: 8585218
+        #    project-name: ОрВД
+        #    environment-name: java11
+        #  - id: 8585219
+        #    project-name: ОрВД
+        #    environment-name: java17
 
   telegram:
     # Off until a bot token exists. While off, notifications are still queued and
@@ -77,11 +125,20 @@ infra-manager:
     #       environments: [STAGE, PROD]   # omit or leave empty for every stand
     #     - chat-id: "-1009876543210"
     #       message-thread-id: 42         # topic inside a forum supergroup
-    routes: []
+    routes:
+      - chat-id: "-5588649667"
 
   bitbucket:
     # Exposes /webhooks/bitbucket. Requires BITBUCKET_WEBHOOK_SECRET when on.
+    # Only useful when Bitbucket can open a connection to this service; from
+    # outside the corporate network it cannot, and poll below is the way in.
     enabled: ${BITBUCKET_ENABLED:false}
+    poll:
+      # Reconstructs pull request events by comparing successive snapshots.
+      # Repositories come from infra-manager.lifecycle.repos.
+      enabled: ${BITBUCKET_POLL_ENABLED:false}
+      interval: 2m
+      max-results: 50
     base-url: ${BITBUCKET_BASE_URL:}
     # Only needed when the container reaches Bitbucket at a different address than
     # a human does -- the card links use this one.
@@ -116,11 +173,23 @@ infra-manager:
   lifecycle:
     # Which repository mirrors to which board. Board ids are deployment-specific,
     # so this belongs in the mounted config file.
-    #   repos:
-    #     - project-key: INFRA
-    #       repo-slug: backend
-    #       trello-board-id: "5f2b..."
-    repos: []
+    # trello-board-id пока заглушка: доска ещё не заведена. Пока Trello выключен,
+    # задачи на карточки уходят в SKIPPED, так что значение ни на что не влияет.
+    # После настройки Trello подставить настоящие id и очистить pr_poll_state,
+    # чтобы следующий проход пересоздал карточки для всех открытых PR.
+    repos:
+      - project-key: LIZA
+        repo-slug: liza
+        trello-board-id: TODO
+      - project-key: LIZA
+        repo-slug: liza-rest-api
+        trello-board-id: TODO
+      - project-key: ORVD
+        repo-slug: orvd
+        trello-board-id: TODO
+      - project-key: ORVD
+        repo-slug: anccopier
+        trello-board-id: TODO
     # List names must exist on the board; a missing one fails loudly rather than
     # silently leaving the card put. Events not listed here refresh the card's
     # content without moving it -- that is what pr:modified should do.

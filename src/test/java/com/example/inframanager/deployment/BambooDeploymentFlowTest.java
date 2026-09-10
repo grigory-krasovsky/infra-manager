@@ -1,5 +1,7 @@
 package com.example.inframanager.deployment;
 
+import java.time.Duration;
+
 import com.example.inframanager.TestcontainersConfiguration;
 import com.example.inframanager.event.InboundEventRepository;
 import com.example.inframanager.event.InboundEventWorker;
@@ -170,6 +172,37 @@ class BambooDeploymentFlowTest {
     }
 
     @Test
+    void aDeploymentThatFinishedLongAgoIsRecordedButNotAnnounced() throws Exception {
+        // What the first poll against a live Bamboo sees: a backlog of historical
+        // results. Recording them is right; announcing them would flood the chat.
+        long finished = System.currentTimeMillis() - Duration.ofDays(3).toMillis();
+        postWebhook(body(1009, "SUCCESS", "INFRA", "STAGE", finished - 30_000, finished));
+
+        worker.runOnce();
+
+        assertThat(outboundTasks.count()).isZero();
+        assertThat(deployments.findByBambooDeploymentResultId(1009)).hasValueSatisfying(record -> {
+            assertThat(record.getStatus()).isEqualTo("SUCCESS");
+            // Marked notified so a later observation cannot resurrect it.
+            assertThat(record.getNotifiedAt()).isNotNull();
+        });
+    }
+
+    @Test
+    void aDeploymentWithNoFinishTimeIsStillAnnounced() throws Exception {
+        // Only happens on webhook payloads, which arrive as the deployment ends.
+        // Staying silent about a real deployment is the worse failure.
+        postWebhook("""
+                {"deploymentResultId":1010,"status":"SUCCESS","deploymentProjectName":"INFRA",
+                 "environmentName":"STAGE"}
+                """);
+
+        worker.runOnce();
+
+        assertThat(outboundTasks.count()).isEqualTo(1);
+    }
+
+    @Test
     void unparseableBodyIsRejected() throws Exception {
         mockMvc.perform(post(URL)
                         .header("X-Infra-Manager-Secret", "test-secret")
@@ -186,12 +219,19 @@ class BambooDeploymentFlowTest {
                 .andExpect(status().isOk());
     }
 
+    /** Timestamps are relative to now: a fixed past date would age past the announcement window. */
     private String body(long resultId, String status, String project, String environment) {
+        long finished = System.currentTimeMillis();
+        return body(resultId, status, project, environment, finished - 30_000, finished);
+    }
+
+    private String body(long resultId, String status, String project, String environment,
+                        long startedAt, long finishedAt) {
         return """
                 {"deploymentResultId":%d,"status":"%s","deploymentProjectName":"%s",
                  "environmentName":"%s","deploymentVersionName":"release-1",
-                 "startedAt":"1757498400000","finishedAt":"1757498430000",
+                 "startedAt":"%d","finishedAt":"%d",
                  "triggerSentence":"Manual run"}
-                """.formatted(resultId, status, project, environment);
+                """.formatted(resultId, status, project, environment, startedAt, finishedAt);
     }
 }

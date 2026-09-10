@@ -1,5 +1,7 @@
 package com.example.inframanager.deployment;
 
+import java.time.Instant;
+
 import com.example.inframanager.event.EventSource;
 import com.example.inframanager.event.InboundEvent;
 import com.example.inframanager.event.InboundEventHandler;
@@ -68,6 +70,15 @@ public class DeploymentEventHandler implements InboundEventHandler {
                     parsed.deploymentResultId(), parsed.normalisedStatus(), parsed.lifeCycleState());
             return;
         }
+        if (isTooOldToAnnounce(parsed)) {
+            // Marked notified so a later observation of the same deployment does not
+            // resurrect it once it is no longer being compared against the clock.
+            log.info("Deployment {} of {} to {} finished at {}; too old to announce",
+                    parsed.deploymentResultId(), record.getProjectName(),
+                    record.getEnvironmentName(), parsed.finishedInstant());
+            record.markNotified();
+            return;
+        }
 
         notifier.notify(
                 parsed.environmentNameOrUnknown(),
@@ -77,6 +88,17 @@ public class DeploymentEventHandler implements InboundEventHandler {
         log.info("Announced deployment {} of {} to {} ({})",
                 parsed.deploymentResultId(), record.getProjectName(),
                 record.getEnvironmentName(), record.getStatus());
+    }
+
+    /**
+     * A deployment with no finish time is announced: that only happens on webhook
+     * payloads, which arrive as the deployment ends, and staying silent about a real
+     * deployment is the worse failure.
+     */
+    private boolean isTooOldToAnnounce(BambooDeploymentEvent event) {
+        Instant finished = event.finishedInstant();
+        return finished != null
+                && finished.isBefore(Instant.now().minus(properties.maxNotificationAge()));
     }
 
     /**

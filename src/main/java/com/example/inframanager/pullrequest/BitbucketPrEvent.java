@@ -21,11 +21,17 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record PullRequest(long id, String title, String description, String state,
+                              /** Bumped by Bitbucket on any edit; the polling path uses it to spot changes. */
+                              Integer version,
+                              Long updatedDate,
                               Ref fromRef, Ref toRef, Author author, List<Reviewer> reviewers, Links links) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Ref(String id, String displayId, Repository repository) {
+    public record Ref(String id, String displayId,
+                      /** Head of the branch; a change means new commits were pushed. */
+                      String latestCommit,
+                      Repository repository) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -85,6 +91,50 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
 
     public String sourceBranch() {
         return pullRequest == null || pullRequest.fromRef() == null ? null : pullRequest.fromRef().displayId();
+    }
+
+    public String latestCommit() {
+        return pullRequest == null || pullRequest.fromRef() == null ? null : pullRequest.fromRef().latestCommit();
+    }
+
+    public String state() {
+        return pullRequest == null ? null : pullRequest.state();
+    }
+
+    /**
+     * Compact summary of who has approved and who wants changes.
+     *
+     * <p>Stored instead of the reviewer list so that a change in review status is
+     * detectable without keeping a copy of every reviewer on every pull request.
+     * Sorted so that Bitbucket reordering the list is not mistaken for a change.
+     */
+    public String reviewerDigest() {
+        if (pullRequest == null || pullRequest.reviewers() == null) {
+            return "";
+        }
+        return pullRequest.reviewers().stream()
+                .filter(reviewer -> reviewer != null && reviewer.user() != null)
+                .map(reviewer -> reviewer.user().name() + "=" + reviewer.status())
+                .sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    /** True when at least one reviewer has approved. */
+    public boolean hasApproval() {
+        if (pullRequest == null || pullRequest.reviewers() == null) {
+            return false;
+        }
+        return pullRequest.reviewers().stream()
+                .anyMatch(reviewer -> reviewer != null && Boolean.TRUE.equals(reviewer.approved()));
+    }
+
+    /** True when at least one reviewer marked the pull request as needing work. */
+    public boolean hasChangesRequested() {
+        if (pullRequest == null || pullRequest.reviewers() == null) {
+            return false;
+        }
+        return pullRequest.reviewers().stream()
+                .anyMatch(reviewer -> reviewer != null && "NEEDS_WORK".equalsIgnoreCase(reviewer.status()));
     }
 
     public String targetBranch() {

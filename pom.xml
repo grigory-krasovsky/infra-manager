@@ -46,6 +46,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!--
+          Supplies the auto-configured RestClient.Builder every integration client is
+          built from. spring-boot-starter-web brings the RestClient class but not its
+          auto-configuration, which in Boot 4 lives here.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restclient</artifactId>
+        </dependency>
 
         <!--
           Boot 4 split auto-configuration into per-technology modules: flyway-core on

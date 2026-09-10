@@ -30,6 +30,18 @@ public record BambooProperties(
         @DefaultValue("15s") Duration readTimeout,
 
         /**
+         * Deployments that finished longer ago than this are recorded but not
+         * announced.
+         *
+         * <p>Without it, the first poll against a live Bamboo treats every historical
+         * result it can see as news and floods the chat -- ten results per environment,
+         * across every configured environment. It also covers the other direction: after
+         * the service has been down for a day, nobody wants yesterday's deployments
+         * arriving all at once.
+         */
+        @DefaultValue("1h") Duration maxNotificationAge,
+
+        /**
          * Deployment project id to display name. Only needed when the Bamboo webhook
          * template cannot render a project name -- older templates expose just the id.
          */
