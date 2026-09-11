@@ -1,5 +1,6 @@
 package com.example.inframanager.pullrequest;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +32,9 @@ public class PrCardService implements InboundEventHandler {
 
     private static final Logger log = LoggerFactory.getLogger(PrCardService.class);
     private static final String DELETED_EVENT = "pr:deleted";
+
+    /** События, после которых пул-реквест уже ничем не станет. */
+    private static final List<String> CLOSING_EVENTS = List.of("pr:merged", "pr:declined");
 
     /** Пункт чек-листа — одна строка; всё, что длиннее, читают в Bitbucket. */
     private static final int CHECKLIST_ITEM_LIMIT = 200;
@@ -105,7 +109,8 @@ public class PrCardService implements InboundEventHandler {
                 authorCandidates(parsed),
                 checklistFor(ref),
                 archive,
-                // Отметку о выполнении ставит суточный проход по возрасту карточки,
+                closedAt(eventKey, parsed),
+                // Отметку о выполнении ставит суточный проход по возрасту пул-реквеста,
                 // а не событие: событие «неделя прошла» никто не присылает.
                 null);
 
@@ -117,6 +122,24 @@ public class PrCardService implements InboundEventHandler {
 
         log.info("Queued card sync for {} after {}{}", ref.asKey(), eventKey,
                 command.moveToListName() == null ? " (content only)" : " -> '" + command.moveToListName() + "'");
+    }
+
+    /**
+     * Когда пул-реквест влили или отклонили — с этого момента отсчитывается неделя до
+     * отметки «выполнено».
+     *
+     * <p>Спрашивается и у состояния, и у ключа события: опрос знает состояние, вебхук —
+     * событие, и совпадают они не всегда. Если закрытие налицо, а даты в payload'е нет,
+     * берётся текущий момент: соврать на минуты лучше, чем не отметить карточку никогда.
+     *
+     * @return null, если событие не о закрытом пул-реквесте, — тогда связка сохраняет то,
+     *         что в ней уже записано
+     */
+    private Instant closedAt(String eventKey, BitbucketPrEvent parsed) {
+        if (!parsed.isClosed() && !CLOSING_EVENTS.contains(eventKey)) {
+            return null;
+        }
+        return parsed.closedInstant().orElseGet(Instant::now);
     }
 
     /**

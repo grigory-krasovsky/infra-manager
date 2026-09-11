@@ -1,6 +1,8 @@
 package com.example.inframanager.trello;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
 
 import com.example.inframanager.outbound.OutboundTarget;
 import com.example.inframanager.outbound.OutboundTaskService;
@@ -14,21 +16,31 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Отмечает выполненными карточки, которые давно лежат в колонке влитых пул-реквестов.
+ * Отмечает выполненными карточки пул-реквестов, закрытых неделю назад и больше.
+ *
+ * <p>Конечных исходов у пул-реквеста два — влит и отклонён, — и для доски они
+ * равнозначны: решение принято, и через неделю к нему уже не возвращаются. Отклонённый
+ * ничем не «хуже» влитого, потому что отметка говорит не «сделано хорошо», а «здесь
+ * всё закончено».
+ *
+ * <p>Неделя считается от закрытия пул-реквеста в Bitbucket, а не от переезда карточки:
+ * в колонку она попадает позже — на время простоя сервиса, а перетащенная руками и на
+ * сколько угодно, — и отсчёт от доски растягивал бы срок на ровном месте.
+ *
+ * <p>Колонка при этом всё равно проверяется: карточка, которую увезли из «влито» или
+ * «отклонено», на доске больше не о законченной работе, что бы ни было в Bitbucket.
+ * Имена колонок берутся из отображения {@code pr:merged} и {@code pr:declined} — заводить
+ * вторую настройку с тем же смыслом значило бы дать им однажды разойтись.
  *
  * <p>Это опрос, а не обработчик события, потому что события тут и нет: «прошла неделя»
- * никто не присылает, это можно только заметить самому. Карточка при этом остаётся в
- * своей колонке — отметка говорит «здесь всё закончено», а колонка по-прежнему говорит,
- * чем именно.
- *
- * <p>Колонка берётся из отображения {@code pr:merged}: колонка влитых — ровно та, куда
- * это событие кладёт карточку, и заводить вторую настройку с тем же смыслом значило бы
- * дать им однажды разойтись.
+ * никто не присылает, это можно только заметить самому.
  */
 public class TrelloCompletionPoller {
 
     private static final Logger log = LoggerFactory.getLogger(TrelloCompletionPoller.class);
-    private static final String MERGED_EVENT = "pr:merged";
+
+    /** События, которыми жизнь пул-реквеста кончается, — и колонки, куда они кладут карточку. */
+    private static final List<String> CLOSING_EVENTS = List.of("pr:merged", "pr:declined");
 
     private final TrelloListResolver listResolver;
     private final LifecycleProperties lifecycle;
@@ -54,18 +66,24 @@ public class TrelloCompletionPoller {
     /** @return сколько карточек этот проход поставил в очередь на отметку */
     @Transactional
     public int runOnce() {
-        String mergedList = lifecycle.listFor(MERGED_EVENT).orElse(null);
-        if (mergedList == null) {
-            // Без этой колонки завершаться нечему: доска не знает, что считать влитым.
-            log.debug("No list is mapped to {}; nothing can age into 'complete'", MERGED_EVENT);
+        List<String> finalLists = CLOSING_EVENTS.stream()
+                .map(event -> lifecycle.listFor(event).orElse(null))
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (finalLists.isEmpty()) {
+            // Ни одно закрывающее событие не отображено на колонку: доске нечего считать
+            // законченным.
+            log.debug("No list is mapped to any of {}; nothing can age into 'complete'", CLOSING_EVENTS);
             return 0;
         }
 
-        Instant enteredBefore = Instant.now().minus(properties.completion().after());
+        Instant closedBefore = Instant.now().minus(properties.completion().after());
         int queued = 0;
-        for (PrCardLink link : linkRepository.findSettledBefore(enteredBefore)) {
+        for (PrCardLink link : linkRepository.findClosedBefore(closedBefore)) {
             try {
-                if (sitsIn(link, mergedList) && enqueue(link, mergedList)) {
+                String listName = sittingIn(link, finalLists);
+                if (listName != null && enqueue(link, listName)) {
                     queued++;
                 }
             } catch (Exception e) {
@@ -77,8 +95,14 @@ public class TrelloCompletionPoller {
         return queued;
     }
 
-    private boolean sitsIn(PrCardLink link, String listName) {
-        return listResolver.listId(link.getTrelloBoardId(), listName).equals(link.getCurrentListId());
+    /** @return имя конечной колонки, в которой лежит карточка, либо null — она не в конечной */
+    private String sittingIn(PrCardLink link, List<String> finalLists) {
+        for (String listName : finalLists) {
+            if (listResolver.listId(link.getTrelloBoardId(), listName).equals(link.getCurrentListId())) {
+                return listName;
+            }
+        }
+        return null;
     }
 
     private boolean enqueue(PrCardLink link, String listName) {
@@ -98,17 +122,19 @@ public class TrelloCompletionPoller {
                 null,
                 null,
                 false,
-                link.getListEnteredAt());
+                // Момент закрытия уже записан в связку, повторять его команде незачем.
+                null,
+                link.getClosedAt());
 
-        // Ключ выведен из факта «попала в колонку тогда-то», а не из текущего времени:
-        // повторный проход ничего не добавит, а карточка, вернувшаяся в эту колонку
-        // заново, получит собственную задачу.
-        String dedupKey = "trello:complete:%s:%d".formatted(ref.asKey(), link.getListEnteredAt().getEpochSecond());
+        // Ключ выведен из факта «закрыт тогда-то», а не из текущего времени: повторный
+        // проход ничего не добавит, а пул-реквест, закрытый заново после переоткрытия,
+        // получит собственную задачу.
+        String dedupKey = "trello:complete:%s:%d".formatted(ref.asKey(), link.getClosedAt().getEpochSecond());
         boolean queued = taskService.enqueue(OutboundTarget.TRELLO, "syncCard", dedupKey,
                 objectMapper.writeValueAsString(command));
         if (queued) {
-            log.info("Card {} for {} has sat in '{}' since {}; queueing it as complete",
-                    link.getTrelloCardId(), ref.asKey(), listName, link.getListEnteredAt());
+            log.info("{} was closed at {} and its card {} sits in '{}'; queueing it as complete",
+                    ref.asKey(), link.getClosedAt(), link.getTrelloCardId(), listName);
         }
         return queued;
     }

@@ -120,6 +120,7 @@ public class TrelloReconciliationPoller {
                 null,
                 null,
                 false,
+                null,
                 null);
 
         // Разложено по минутным корзинам: несколько проходов, видящих одно и то же

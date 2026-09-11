@@ -1,5 +1,6 @@
 package com.example.inframanager.pullrequest;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +25,8 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
                               /** Bitbucket увеличивает его при любой правке; поллинг по нему замечает изменения. */
                               Integer version,
                               Long updatedDate,
+                              /** Миллисекунды эпохи; появляется вместе с закрытием и потом не меняется. */
+                              Long closedDate,
                               Ref fromRef, Ref toRef, Author author, List<Reviewer> reviewers, Links links) {
     }
 
@@ -106,6 +109,26 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
 
     public String state() {
         return pullRequest == null ? null : pullRequest.state();
+    }
+
+    /** Влит или отклонён — то есть больше ничем не станет. */
+    public boolean isClosed() {
+        return "MERGED".equalsIgnoreCase(state()) || "DECLINED".equalsIgnoreCase(state());
+    }
+
+    /**
+     * Когда пул-реквест влили или отклонили. Пусто, пока он открыт.
+     *
+     * <p>{@code closedDate} приходит не в каждом теле вебхука и не в каждой версии
+     * Bitbucket, поэтому есть запасной вариант — {@code updatedDate}: у только что
+     * закрытого пул-реквеста последняя правка и есть закрытие.
+     */
+    public Optional<Instant> closedInstant() {
+        if (pullRequest == null || !isClosed()) {
+            return Optional.empty();
+        }
+        Long millis = pullRequest.closedDate() != null ? pullRequest.closedDate() : pullRequest.updatedDate();
+        return Optional.ofNullable(millis).map(Instant::ofEpochMilli);
     }
 
     /**

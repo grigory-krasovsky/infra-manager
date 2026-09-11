@@ -12,15 +12,15 @@ public interface PrCardLinkRepository extends JpaRepository<PrCardLink, Long> {
 
     List<PrCardLink> findByArchivedFalseAndTrelloCardIdIsNotNull();
 
-    List<PrCardLink> findByArchivedFalseAndTrelloCardIdIsNotNullAndCompletedAtIsNullAndListEnteredAtBefore(
-            Instant enteredBefore);
+    List<PrCardLink> findByArchivedFalseAndTrelloCardIdIsNotNullAndCompletedAtIsNullAndClosedAtBefore(
+            Instant closedBefore);
 
     default Optional<PrCardLink> find(PullRequestRef ref) {
         return findByProjectKeyAndRepoSlugAndPrId(ref.projectKey(), ref.repoSlug(), ref.prId());
     }
 
-    /** @return карточки, которые лежат в своей колонке с тех пор и всё ещё не отмечены выполненными */
-    default List<PrCardLink> findSettledBefore(Instant enteredBefore) {
-        return findByArchivedFalseAndTrelloCardIdIsNotNullAndCompletedAtIsNullAndListEnteredAtBefore(enteredBefore);
+    /** @return карточки закрытых до этого момента пул-реквестов, ещё не отмеченные выполненными */
+    default List<PrCardLink> findClosedBefore(Instant closedBefore) {
+        return findByArchivedFalseAndTrelloCardIdIsNotNullAndCompletedAtIsNullAndClosedAtBefore(closedBefore);
     }
 }

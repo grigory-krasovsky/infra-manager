@@ -25,9 +25,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Взросление карточки до «выполнено»: неделя в колонке влитых — и отметка.
+ * Взросление карточки до «выполнено»: неделя с закрытия пул-реквеста — и отметка.
  *
- * <p>Возраст карточки — состояние, которого нет ни в одном событии, поэтому проверяется
+ * <p>Возраст — состояние, которого нет ни в одном отдельном событии, поэтому проверяется
  * он на нашей собственной записи, а Trello подменён.
  */
 @SpringBootTest(properties = {
@@ -37,10 +37,12 @@ import static org.mockito.Mockito.when;
         "infra-manager.trello.token=test-token",
         "infra-manager.trello.completion.enabled=true",
         "infra-manager.trello.completion.after=7d",
-        // Объявлено здесь, а не унаследовано из application.yaml: колонка влитых — это
-        // то, что оказалось на конкретной доске, и её переименование не должно ломать тест.
+        // Объявлено здесь, а не унаследовано из application.yaml: конечные колонки — это
+        // то, что оказалось на конкретной доске, и их переименование не должно ломать тест.
         "infra-manager.lifecycle.event-to-list[0].event=pr:merged",
-        "infra-manager.lifecycle.event-to-list[0].list=Merged"
+        "infra-manager.lifecycle.event-to-list[0].list=Merged",
+        "infra-manager.lifecycle.event-to-list[1].event=pr:declined",
+        "infra-manager.lifecycle.event-to-list[1].list=Declined"
 })
 @Import(TestcontainersConfiguration.class)
 class TrelloCompletionPollerTest {
@@ -67,11 +69,12 @@ class TrelloCompletionPollerTest {
         when(trelloClient.boardLists(eq("board-1"), anyString(), anyString(), anyString()))
                 .thenReturn(List.of(
                         new TrelloClient.TrelloList("list-review", "Review", false),
-                        new TrelloClient.TrelloList("list-merged", "Merged", false)));
+                        new TrelloClient.TrelloList("list-merged", "Merged", false),
+                        new TrelloClient.TrelloList("list-declined", "Declined", false)));
     }
 
     @Test
-    void aCardThatHasSatAmongTheMergedForAWeekIsQueuedAsComplete() {
+    void aPullRequestMergedAWeekAgoIsQueuedAsComplete() {
         givenLink(1, "card-1", "list-merged", 8);
 
         assertThat(poller.runOnce()).isEqualTo(1);
@@ -87,16 +90,23 @@ class TrelloCompletionPollerTest {
     }
 
     @Test
-    void aCardMergedYesterdayIsLeftAlone() {
-        givenLink(2, "card-2", "list-merged", 1);
+    void aDeclinedPullRequestCompletesJustTheSame() {
+        givenLink(2, "card-2", "list-declined", 8);
+
+        assertThat(poller.runOnce()).isEqualTo(1);
+    }
+
+    @Test
+    void aPullRequestMergedYesterdayIsLeftAlone() {
+        givenLink(3, "card-3", "list-merged", 1);
 
         assertThat(poller.runOnce()).isZero();
         assertThat(outboundTasks.count()).isZero();
     }
 
     @Test
-    void aCardStillUnderReviewNeverCompletesNoMatterHowLongItSitsThere() {
-        givenLink(3, "card-3", "list-review", 30);
+    void aCardDraggedOutOfItsFinalColumnIsLeftAlone() {
+        givenLink(8, "card-8", "list-review", 30);
 
         assertThat(poller.runOnce()).isZero();
         assertThat(outboundTasks.count()).isZero();
@@ -144,25 +154,25 @@ class TrelloCompletionPollerTest {
     }
 
     @Test
-    void aCardThatLeftTheColumnStartsCountingAgain() {
-        givenLink(7, "card-7", "list-merged", 8);
+    void aPullRequestStillOpenHasNothingToCountFrom() {
         transactionTemplate.executeWithoutResult(status -> {
-            PrCardLink link = links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 7).orElseThrow();
-            // Новые коммиты вернули PR на ревью.
+            PrCardLink link = new PrCardLink(new PullRequestRef("INFRA", "backend", 7), "board-1");
+            // Карточка в колонке ревью, момента закрытия нет — считать не от чего.
             link.recordCard("card-7", "list-review", false);
+            links.save(link);
         });
 
         assertThat(poller.runOnce()).isZero();
     }
 
-    private void givenLink(long prId, String cardId, String listId, int daysInList) {
+    private void givenLink(long prId, String cardId, String listId, int daysSinceClosed) {
         transactionTemplate.executeWithoutResult(status -> {
             PrCardLink link = new PrCardLink(new PullRequestRef("INFRA", "backend", prId), "board-1");
             link.recordCard(cardId, listId, false);
             links.save(link);
         });
-        // Карточка попадает в колонку «сейчас», а нужен возраст — его проставляем мимо сущности.
-        jdbc.update("UPDATE pr_card_link SET list_entered_at = now() - make_interval(days => ?) WHERE pr_id = ?",
-                daysInList, prId);
+        // Момент закрытия приходит из Bitbucket, а здесь его надо просто назначить.
+        jdbc.update("UPDATE pr_card_link SET closed_at = now() - make_interval(days => ?) WHERE pr_id = ?",
+                daysSinceClosed, prId);
     }
 }

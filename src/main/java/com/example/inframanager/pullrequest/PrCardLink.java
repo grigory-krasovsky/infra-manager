@@ -46,12 +46,14 @@ public class PrCardLink {
     private String issueKey;
 
     /**
-     * Когда карточка попала в {@link #currentListId}. Отдельно от {@link #updatedAt},
-     * который двигает любая правка содержимого: «давно ли лежит в колонке» — это про
-     * перемещения, а не про переписанный заголовок.
+     * Когда пул-реквест влили или отклонили, по данным Bitbucket. Null, пока он открыт.
+     *
+     * <p>Хранится отдельно от {@link #updatedAt} и от того, когда карточка переехала в
+     * колонку: и то и другое говорит о доске, а срок, после которого работа считается
+     * законченной, отсчитывается от события в репозитории.
      */
-    @Column(name = "list_entered_at")
-    private Instant listEnteredAt;
+    @Column(name = "closed_at")
+    private Instant closedAt;
 
     /** Когда карточку отметили в Trello выполненной; null — не отмечена. */
     @Column(name = "completed_at")
@@ -119,8 +121,13 @@ public class PrCardLink {
         return archived;
     }
 
-    public Instant getListEnteredAt() {
-        return listEnteredAt;
+    public Instant getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(Instant closedAt) {
+        this.closedAt = closedAt;
+        touch();
     }
 
     public Instant getCompletedAt() {
@@ -128,12 +135,6 @@ public class PrCardLink {
     }
 
     public void recordCard(String cardId, String listId, boolean archived) {
-        if (listId != null && !listId.equals(this.currentListId)) {
-            this.listEnteredAt = Instant.now();
-            // Карточка переехала, и прежняя отметка о выполнении к новой колонке
-            // отношения не имеет: отсчёт начинается заново.
-            this.completedAt = null;
-        }
         this.trelloCardId = cardId;
         this.currentListId = listId;
         this.archived = archived;

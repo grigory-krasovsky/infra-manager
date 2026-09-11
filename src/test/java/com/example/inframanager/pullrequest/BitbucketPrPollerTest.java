@@ -361,7 +361,7 @@ class BitbucketPrPollerTest {
         BitbucketPrEvent.Repository repository = new BitbucketPrEvent.Repository(
                 "liza", "liza", new BitbucketPrEvent.Project("LIZA", "LIZA"));
         return new BitbucketPrEvent.PullRequest(
-                id, "Fix the thing", "description", state, version, null,
+                id, "Fix the thing", "description", state, version, null, null,
                 new BitbucketPrEvent.Ref("refs/heads/feature", "feature", latestCommit, repository),
                 new BitbucketPrEvent.Ref("refs/heads/main", "main", "commit-main", repository),
                 new BitbucketPrEvent.Author(new BitbucketPrEvent.User("kras", "Grigory")),

@@ -211,7 +211,8 @@ public class BitbucketPrPoller {
 
         return new BitbucketPrEvent.PullRequest(
                 pullRequest.id(), pullRequest.title(), pullRequest.description(), pullRequest.state(),
-                pullRequest.version(), pullRequest.updatedDate(), pullRequest.fromRef(), resolved,
+                pullRequest.version(), pullRequest.updatedDate(), pullRequest.closedDate(),
+                pullRequest.fromRef(), resolved,
                 pullRequest.author(), pullRequest.reviewers(), pullRequest.links());
     }
 

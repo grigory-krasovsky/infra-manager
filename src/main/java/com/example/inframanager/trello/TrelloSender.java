@@ -73,6 +73,12 @@ public class TrelloSender implements OutboundTaskSender {
         if (command.issueKey() != null && !command.issueKey().equals(link.getIssueKey())) {
             link.setIssueKey(command.issueKey());
         }
+        // Перезаписывается, а не ставится один раз: у карточек, заведённых до появления
+        // этого поля, стоит приблизительное значение из миграции, и первое же событие о
+        // закрытии должно его исправить.
+        if (command.closedAt() != null && !command.closedAt().equals(link.getClosedAt())) {
+            link.setClosedAt(command.closedAt());
+        }
 
         try {
             if (link.getTrelloCardId() == null) {
