@@ -44,14 +44,6 @@ public class PrPollState {
     @Column(name = "reviewer_digest", length = 64)
     private String reviewerDigest;
 
-    /**
-     * Незакрытые задачи. Отдельно от выжимки по ревьюерам, потому что меняются
-     * независимо от неё: задачу можно открыть и закрыть, не трогая ни статус ревью,
-     * ни версию пул-реквеста.
-     */
-    @Column(name = "open_tasks")
-    private Integer openTasks;
-
     @Column(name = "first_seen_at", nullable = false)
     private Instant firstSeenAt;
 
@@ -85,24 +77,18 @@ public class PrPollState {
         return reviewerDigest;
     }
 
-    /** Строки, заведённые до появления колонки, ничего о задачах не знают — считаем, что их не было. */
-    public int getOpenTasks() {
-        return openTasks == null ? 0 : openTasks;
-    }
-
     public Instant getFirstSeenAt() {
         return firstSeenAt;
     }
 
     /** Записывает только что сделанное наблюдение. Выжимка обрезается под размер колонки. */
-    public void observe(String state, Integer version, String latestCommit, String reviewerDigest, int openTasks) {
+    public void observe(String state, Integer version, String latestCommit, String reviewerDigest) {
         this.state = state;
         this.version = version;
         this.latestCommit = latestCommit;
         this.reviewerDigest = reviewerDigest == null || reviewerDigest.length() <= 64
                 ? reviewerDigest
                 : reviewerDigest.substring(0, 64);
-        this.openTasks = openTasks;
         this.lastSeenAt = Instant.now();
     }
 }
