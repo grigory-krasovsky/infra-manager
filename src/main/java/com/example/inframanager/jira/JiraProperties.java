@@ -33,5 +33,19 @@ public record JiraProperties(
          * стандартная форма Atlassian; ужмите под ключи своих проектов, если в именах веток
          * встречается что-то ещё, похожее на ключ.
          */
-        @DefaultValue("([A-Z][A-Z0-9]+-\\d+)") String issueKeyPattern) {
+        @DefaultValue("([A-Z][A-Z0-9]+-\\d+)") String issueKeyPattern,
+
+        /**
+         * Адрес Jira для ссылок, которые прочтёт человек. Отделён от {@code baseUrl}
+         * потому, что тот — адрес, по которому в Jira ходит контейнер, и совпадать они не
+         * обязаны. Нужен и при выключенной интеграции: ссылку на задачу можно поставить,
+         * ничего у Jira не спрашивая.
+         */
+        @DefaultValue("") String browseUrl) {
+
+    /** @return адрес для ссылок; пусто, если не настроен ни он, ни базовый */
+    public String browseUrlOrBase() {
+        String url = browseUrl == null || browseUrl.isBlank() ? baseUrl : browseUrl;
+        return url == null ? "" : url.replaceAll("/+$", "");
+    }
 }

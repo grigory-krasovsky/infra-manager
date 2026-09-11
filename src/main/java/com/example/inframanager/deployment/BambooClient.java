@@ -19,6 +19,32 @@ public interface BambooClient {
     EnvironmentResults environmentResults(@PathVariable long environmentId,
                                           @RequestParam("max-results") int maxResults);
 
+    /**
+     * Сборка, породившая деплой. Нужна ровно за одним — за связанными задачами: сам
+     * результат деплоя о них не знает, а Bamboo вытаскивает их из сообщений коммитов.
+     *
+     * @param buildKey ключ вида {@code LIZA-APIP-636}
+     * @param expand   {@code jiraIssues}; без него Bamboo раздел не отдаёт
+     */
+    @GetExchange("/rest/api/latest/result/{buildKey}")
+    BuildResult buildResult(@PathVariable String buildKey, @RequestParam("expand") String expand);
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record BuildResult(JiraIssues jiraIssues) {
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record JiraIssues(List<Issue> issue) {
+        }
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record Issue(String key, String summary) {
+        }
+
+        public List<Issue> issues() {
+            return jiraIssues == null || jiraIssues.issue() == null ? List.of() : jiraIssues.issue();
+        }
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record EnvironmentResults(List<DeploymentResult> results) {
     }

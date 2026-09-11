@@ -32,6 +32,12 @@ public record TelegramProperties(
          */
         @DefaultValue Proxy proxy,
 
+        /**
+         * В каком поясе показывать время в уведомлениях. Хранится всё в UTC, но читают
+         * сообщения люди, и «10.09.2026 18:16» им понятнее, чем то же самое в UTC.
+         */
+        @DefaultValue("Europe/Moscow") String timeZone,
+
         @DefaultValue List<Route> routes) {
 
     /**

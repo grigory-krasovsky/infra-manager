@@ -110,6 +110,6 @@ class JiraEnricherTest {
     private JiraProperties properties(boolean enabled) {
         return new JiraProperties(enabled, "https://jira.local", "token",
                 Duration.ofSeconds(2), Duration.ofSeconds(3), Duration.ofHours(1),
-                "([A-Z][A-Z0-9]+-\\d+)");
+                "([A-Z][A-Z0-9]+-\\d+)", "");
     }
 }

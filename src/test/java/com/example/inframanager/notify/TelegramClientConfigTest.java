@@ -72,7 +72,7 @@ class TelegramClientConfigTest {
     void aMissingBotTokenStillFailsAtStartup() {
         assertThatThrownBy(() -> new TelegramClientConfig(new TelegramProperties(
                 true, "https://api.telegram.org", "  ", Duration.ofSeconds(5), Duration.ofSeconds(10),
-                proxy(Type.HTTP, null, 0), List.of())))
+                proxy(Type.HTTP, null, 0), "Europe/Moscow", List.of())))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("TELEGRAM_BOT_TOKEN");
     }
@@ -80,7 +80,7 @@ class TelegramClientConfigTest {
     private static TelegramClientConfig config(TelegramProperties.Proxy proxy) {
         return new TelegramClientConfig(new TelegramProperties(
                 true, "https://api.telegram.org", "bot-token",
-                Duration.ofSeconds(5), Duration.ofSeconds(10), proxy, List.of()));
+                Duration.ofSeconds(5), Duration.ofSeconds(10), proxy, "Europe/Moscow", List.of()));
     }
 
     private static TelegramProperties.Proxy proxy(Type type, String host, int port) {

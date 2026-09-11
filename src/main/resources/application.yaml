@@ -123,6 +123,8 @@ infra-manager:
     # Пустой host означает «ходим напрямую».
     # type: http | socks5 — угадать нельзя, от типа зависит сам способ ходить.
     # Авторизация (username/password) поддержана только для http.
+    # В каком поясе показывать время деплоя. В базе всё в UTC, а читают люди.
+    time-zone: ${TELEGRAM_TIME_ZONE:Europe/Moscow}
     proxy:
       type: ${TELEGRAM_PROXY_TYPE:http}
       host: ${TELEGRAM_PROXY_HOST:}
@@ -164,6 +166,10 @@ infra-manager:
     enabled: ${JIRA_ENABLED:false}
     base-url: ${JIRA_BASE_URL:}
     token: ${JIRA_TOKEN:}
+    # Адрес для ссылок, которые кликает человек. Отделён от base-url потому, что тот —
+    # адрес, по которому в Jira ходит контейнер. Нужен и при выключенной интеграции:
+    # ссылку на задачу в уведомлении о деплое можно поставить, ничего у Jira не спрашивая.
+    browse-url: ${JIRA_BROWSE_URL:}
 
   trello:
     # While off, card updates are queued and marked SKIPPED, not dropped.

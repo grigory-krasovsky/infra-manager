@@ -1,9 +1,15 @@
 package com.example.inframanager.deployment;
 
+import java.time.DateTimeException;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.example.inframanager.notify.TelegramProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -23,7 +29,23 @@ public class DeploymentMessageRenderer {
 
     private static final Pattern HTTP_URL = Pattern.compile("https?://[^\\s\"]+");
 
-    public String render(BambooDeploymentEvent event) {
+    /** Длинное summary задачи превращает уведомление в простыню. */
+    private static final int MAX_SUMMARY = 90;
+
+    private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
+    private final ZoneId zone;
+
+    public DeploymentMessageRenderer(TelegramProperties properties) {
+        try {
+            this.zone = ZoneId.of(properties.timeZone());
+        } catch (DateTimeException e) {
+            throw new IllegalArgumentException(
+                    "infra-manager.telegram.time-zone: '%s' is not a time zone".formatted(properties.timeZone()), e);
+        }
+    }
+
+    public String render(BambooDeploymentEvent event, List<DeploymentIssue> issues) {
         String project = escape(event.projectNameOrUnknown());
         String environment = escape(event.environmentNameOrUnknown());
 
@@ -35,17 +57,52 @@ public class DeploymentMessageRenderer {
                     .append("</b> не прошёл (").append(escape(event.normalisedStatus())).append(')');
         }
 
-        if (StringUtils.hasText(event.deploymentVersionName())) {
+        for (DeploymentIssue issue : issues == null ? List.<DeploymentIssue>of() : issues) {
+            text.append("\nЗадача: ").append(renderIssue(issue));
+        }
+        // Имя версии Bamboo придумывает сам («release-617»), и о содержимом деплоя оно не
+        // говорит ничего — показываем его только когда задачу выяснить не удалось.
+        if ((issues == null || issues.isEmpty()) && StringUtils.hasText(event.deploymentVersionName())) {
             text.append("\nВерсия: ").append(escape(event.deploymentVersionName()));
         }
-        Duration duration = event.duration();
-        if (duration != null) {
-            text.append("\nДлительность: ").append(formatDuration(duration));
+
+        String when = renderWhen(event);
+        if (when != null) {
+            text.append("\nКогда: ").append(when);
         }
         if (StringUtils.hasText(event.triggerSentence())) {
             text.append("\nЗапуск: ").append(renderTrigger(event.triggerSentence()));
         }
         return text.toString();
+    }
+
+    private String renderIssue(DeploymentIssue issue) {
+        String key = escape(issue.key());
+        String link = StringUtils.hasText(issue.url())
+                ? "<a href=\"%s\">%s</a>".formatted(escape(issue.url()), key)
+                : key;
+        return StringUtils.hasText(issue.summary())
+                ? link + " · " + escape(truncate(issue.summary()))
+                : link;
+    }
+
+    /**
+     * Когда деплой закончился и сколько шёл. Время — в часовом поясе из настроек: хранится
+     * всё в UTC, а читают сообщение люди, живущие в одном поясе.
+     */
+    private String renderWhen(BambooDeploymentEvent event) {
+        Instant finished = event.finishedInstant();
+        Duration duration = event.duration();
+        if (finished == null) {
+            return duration == null ? null : "за " + formatDuration(duration);
+        }
+        String at = WHEN.format(finished.atZone(zone));
+        return duration == null ? at : at + ", за " + formatDuration(duration);
+    }
+
+    static String truncate(String summary) {
+        String trimmed = summary.trim();
+        return trimmed.length() <= MAX_SUMMARY ? trimmed : trimmed.substring(0, MAX_SUMMARY - 1).trim() + "…";
     }
 
     /**

@@ -51,6 +51,6 @@ class IssueKeyExtractorTest {
 
     private JiraProperties properties(String pattern) {
         return new JiraProperties(false, "", "", Duration.ofSeconds(2), Duration.ofSeconds(3),
-                Duration.ofHours(1), pattern);
+                Duration.ofHours(1), pattern, "");
     }
 }
