@@ -95,7 +95,7 @@ public class PrCardService implements InboundEventHandler {
                 renderer.title(parsed, board.get(), issueKey, issueSummary),
                 renderer.description(parsed, ref),
                 issueKey,
-                labelsFor(parsed),
+                labelsFor(parsed, board.get()),
                 authorCandidates(parsed),
                 archive);
 
@@ -110,15 +110,19 @@ public class PrCardService implements InboundEventHandler {
     }
 
     /**
-     * Куда направлено изменение. Только это: репозиторий уже стоит префиксом в заголовке,
-     * а автор — участник карточки, а не метка: аватар считывается быстрее цветной плашки,
-     * да и десяти цветов палитры Trello перестаёт хватать задолго до того, как кончится
-     * команда.
+     * Проект и целевая ветка. Проект дублирует префикс в заголовке намеренно: по
+     * заголовку доску не отфильтруешь, а все репозитории зеркалятся на одну доску, и без
+     * метки «показать только своё» на ней не сделать.
+     *
+     * <p>Автор остаётся участником карточки, а не меткой: аватар считывается быстрее
+     * цветной плашки, да и десяти цветов палитры Trello перестаёт хватать задолго до
+     * того, как кончится команда.
      */
-    private List<String> labelsFor(BitbucketPrEvent event) {
+    private List<String> labelsFor(BitbucketPrEvent event, LifecycleProperties.RepoBoard repo) {
         List<String> labels = new ArrayList<>();
+        labels.add(repo.displayPrefix());
         if (StringUtils.hasText(event.targetBranch())) {
-            labels.add(event.targetBranch());
+            labels.add(lifecycle.labelForBranch(event.targetBranch()));
         }
         return labels;
     }

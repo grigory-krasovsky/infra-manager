@@ -30,6 +30,20 @@ public record LifecycleProperties(
          */
         @DefaultValue List<EventList> eventToList,
 
+        /**
+         * Целевая ветка → имя метки, когда они не совпадают. В ЦСВ ветка {@code postgres}
+         * по смыслу и есть тест: PR в неё — это PR в тест, и на доске он должен попадать
+         * под тот же фильтр, что и {@code test} из остальных репозиториев.
+         *
+         * <p>Подменяется только метка. Заголовок и описание карточки называют ветку её
+         * настоящим именем: метка нужна для фильтра, а не для того, чтобы скрыть, куда
+         * на самом деле поедет изменение.
+         *
+         * <p>Список пар, а не map, по той же причине, что и {@code eventToList}: в именах
+         * веток есть «/» и точки, а такой ключ property Spring разбирает по-своему.
+         */
+        @DefaultValue List<BranchLabel> branchLabels,
+
         /** Отправлять ли карточку с уже полученным апрувом обратно на ревью при новых коммитах. */
         @DefaultValue("true") boolean reopenOnNewCommits,
 
@@ -55,6 +69,21 @@ public record LifecycleProperties(
     }
 
     public record EventList(String event, String list) {
+    }
+
+    public record BranchLabel(String branch, String label) {
+    }
+
+    /** @return имя метки для целевой ветки: псевдоним, если он задан, иначе сама ветка */
+    public String labelForBranch(String branch) {
+        if (branch == null || branch.isBlank()) {
+            return branch;
+        }
+        return branchLabels.stream()
+                .filter(alias -> branch.equalsIgnoreCase(alias.branch()))
+                .map(BranchLabel::label)
+                .findFirst()
+                .orElse(branch);
     }
 
     public Optional<RepoBoard> boardFor(PullRequestRef ref) {

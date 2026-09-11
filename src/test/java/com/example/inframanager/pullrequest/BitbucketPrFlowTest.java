@@ -29,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -71,6 +72,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "infra-manager.lifecycle.event-to-list[2].list=Merged",
         "infra-manager.lifecycle.event-to-list[3].event=pr:declined",
         "infra-manager.lifecycle.event-to-list[3].list=Declined",
+        "infra-manager.lifecycle.branch-labels[0].branch=postgres",
+        "infra-manager.lifecycle.branch-labels[0].label=test",
         "infra-manager.lifecycle.default-list=Review"
 })
 @AutoConfigureMockMvc
@@ -109,6 +112,14 @@ class BitbucketPrFlowTest {
                         new TrelloClient.TrelloList("list-review", "Review", false),
                         new TrelloClient.TrelloList("list-approved", "Approved", false),
                         new TrelloClient.TrelloList("list-merged", "Merged", false)));
+        when(trelloClient.boardLabels(eq("board-1"), anyString(), anyString(), anyInt()))
+                .thenReturn(List.of());
+        // Метки заводятся по мере надобности; id повторяет имя, чтобы в проверках было
+        // видно, что именно повесили на карточку.
+        when(trelloClient.createLabel(anyString(), anyString(), eq("board-1"), anyString(), anyString()))
+                .thenAnswer(invocation -> new TrelloClient.TrelloLabel(
+                        "label-" + invocation.getArgument(3), invocation.getArgument(3),
+                        invocation.getArgument(4)));
         when(trelloClient.createCard(anyString(), anyString(), any()))
                 .thenReturn(new TrelloClient.TrelloCard("card-1", "PR", "list-review", false));
         when(trelloClient.updateCard(anyString(), anyString(), anyString(), any()))
@@ -125,11 +136,14 @@ class BitbucketPrFlowTest {
                 ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
         verify(trelloClient).createCard(eq("test-key"), eq("test-token"), request.capture());
         assertThat(request.getValue().idList()).isEqualTo("list-review");
-        assertThat(request.getValue().name()).isEqualTo("BACK Fix the thing");
+        assertThat(request.getValue().name()).isEqualTo("BACK · Fix the thing");
         assertThat(request.getValue().desc())
                 .contains("https://bitbucket.local/projects/INFRA/repos/backend/pull-requests/42")
                 .contains("INFRA/backend")
                 .contains("feature/thing → main");
+        // Проект — чтобы на общей доске можно было отобрать карточки одного репозитория
+        // фильтром; ветка — чтобы было видно, куда поедет изменение.
+        assertThat(request.getValue().idLabels()).isEqualTo("label-BACK,label-main");
 
         assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 42))
                 .hasValueSatisfying(link -> {
@@ -168,7 +182,7 @@ class BitbucketPrFlowTest {
                 ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
         verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
         assertThat(request.getValue().idList()).isNull();
-        assertThat(request.getValue().name()).isEqualTo("BACK New title");
+        assertThat(request.getValue().name()).isEqualTo("BACK · New title");
     }
 
     @Test
@@ -297,6 +311,20 @@ class BitbucketPrFlowTest {
                 .allSatisfy(e -> assertThat(e.getStatus()).isEqualTo(ProcessingStatus.DONE));
     }
 
+    @Test
+    void aBranchThatStandsForTestCarriesTheTestLabel() throws Exception {
+        deliver("pr:opened", payloadIntoBranch(62, "Fix", "postgres"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.CreateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
+        verify(trelloClient).createCard(anyString(), anyString(), request.capture());
+        assertThat(request.getValue().idLabels()).isEqualTo("label-BACK,label-test");
+        // Метка — для фильтра, а не подмена факта: куда именно поедет изменение,
+        // в описании написано честно.
+        assertThat(request.getValue().desc()).contains("feature/thing → postgres");
+    }
+
     private void drain() {
         inboundWorker.runOnce();
         outboundWorker.runOnce();
@@ -324,16 +352,25 @@ class BitbucketPrFlowTest {
     }
 
     private String payload(long prId, String title, String projectKey, String repoSlug, String branch) {
+        return payload(prId, title, projectKey, repoSlug, branch, "main");
+    }
+
+    private String payloadIntoBranch(long prId, String title, String targetBranch) {
+        return payload(prId, title, "INFRA", "backend", "feature/thing", targetBranch);
+    }
+
+    private String payload(long prId, String title, String projectKey, String repoSlug,
+                           String branch, String targetBranch) {
         return """
                 {"eventKey":"pr:event","actor":{"name":"kras","displayName":"Grigory"},
                  "pullRequest":{"id":%d,"title":"%s","state":"OPEN",
                   "fromRef":{"displayId":"%s",
                              "repository":{"slug":"%s","project":{"key":"%s"}}},
-                  "toRef":{"displayId":"main",
+                  "toRef":{"displayId":"%s",
                            "repository":{"slug":"%s","project":{"key":"%s"}}},
                   "author":{"user":{"name":"kras","displayName":"Grigory"}},
                   "reviewers":[{"user":{"displayName":"Reviewer One"},"approved":false}]}}
-                """.formatted(prId, title, branch, repoSlug, projectKey, repoSlug, projectKey);
+                """.formatted(prId, title, branch, repoSlug, projectKey, targetBranch, repoSlug, projectKey);
     }
 
     private static String sign(String body) {
