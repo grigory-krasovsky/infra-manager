@@ -45,5 +45,16 @@ public record TrelloCardCommand(
          */
         java.util.List<String> memberCandidates,
 
+        /**
+         * Задачи ревью как пункты чек-листа. Null означает «не трогать чек-лист» —
+         * именно это нужно сверке и всему, что не знает о задачах; пустой список,
+         * наоборот, означает «задач нет», и чек-лист убирается с карточки.
+         */
+        java.util.List<ChecklistItem> checklist,
+
         boolean archive) {
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ChecklistItem(String name, boolean done) {
+    }
 }

@@ -33,6 +33,7 @@ public class TrelloSender implements OutboundTaskSender {
     private final TrelloListResolver listResolver;
     private final TrelloLabelResolver labelResolver;
     private final TrelloMemberResolver memberResolver;
+    private final TrelloChecklistSync checklistSync;
     private final TrelloProperties properties;
     private final PrCardLinkRepository linkRepository;
     private final ObjectMapper objectMapper;
@@ -41,6 +42,7 @@ public class TrelloSender implements OutboundTaskSender {
                         TrelloListResolver listResolver,
                         TrelloLabelResolver labelResolver,
                         TrelloMemberResolver memberResolver,
+                        TrelloChecklistSync checklistSync,
                         TrelloProperties properties,
                         PrCardLinkRepository linkRepository,
                         ObjectMapper objectMapper) {
@@ -48,6 +50,7 @@ public class TrelloSender implements OutboundTaskSender {
         this.listResolver = listResolver;
         this.labelResolver = labelResolver;
         this.memberResolver = memberResolver;
+        this.checklistSync = checklistSync;
         this.properties = properties;
         this.linkRepository = linkRepository;
         this.objectMapper = objectMapper;
@@ -94,6 +97,7 @@ public class TrelloSender implements OutboundTaskSender {
                         labelIds(command), memberIds(command)));
 
         link.recordCard(card.id(), listId, false);
+        checklistSync.sync(card.id(), command.checklist());
         log.info("Created Trello card {} for {} in list '{}'", card.id(), command.pullRequest().asKey(), listName);
     }
 
@@ -132,6 +136,7 @@ public class TrelloSender implements OutboundTaskSender {
         link.recordCard(link.getTrelloCardId(),
                 listId != null ? listId : link.getCurrentListId(),
                 command.archive());
+        checklistSync.sync(link.getTrelloCardId(), command.checklist());
         log.info("Updated Trello card {} for {}{}", link.getTrelloCardId(), command.pullRequest().asKey(),
                 command.moveToListName() == null ? "" : " -> list '" + command.moveToListName() + "'");
     }

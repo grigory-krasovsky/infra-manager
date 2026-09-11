@@ -79,10 +79,11 @@ public class BitbucketPollConfig implements SchedulingConfigurer {
     @Bean
     BitbucketPrPoller bitbucketPrPoller(BitbucketClient client,
                                         PrPollStateRepository stateRepository,
+                                        PrTaskReader taskReader,
                                         InboundEventIngestService ingestService,
                                         ObjectMapper objectMapper) {
         return new BitbucketPrPoller(
-                client, properties, lifecycle, stateRepository, ingestService, objectMapper);
+                client, properties, lifecycle, stateRepository, taskReader, ingestService, objectMapper);
     }
 
     @Override

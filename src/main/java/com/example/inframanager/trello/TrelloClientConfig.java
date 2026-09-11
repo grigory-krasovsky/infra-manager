@@ -81,13 +81,19 @@ public class TrelloClientConfig implements SchedulingConfigurer {
     }
 
     @Bean
+    TrelloChecklistSync trelloChecklistSync(TrelloClient client) {
+        return new TrelloChecklistSync(client, properties);
+    }
+
+    @Bean
     TrelloSender trelloSender(TrelloClient client,
                               TrelloListResolver listResolver,
                               TrelloLabelResolver labelResolver,
                               TrelloMemberResolver memberResolver,
+                              TrelloChecklistSync checklistSync,
                               PrCardLinkRepository linkRepository,
                               ObjectMapper objectMapper) {
-        return new TrelloSender(client, listResolver, labelResolver, memberResolver,
+        return new TrelloSender(client, listResolver, labelResolver, memberResolver, checklistSync,
                 properties, linkRepository, objectMapper);
     }
 

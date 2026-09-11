@@ -14,8 +14,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -185,6 +188,62 @@ class BitbucketPrPollerTest {
     }
 
     @Test
+    void aTaskAppearingRefreshesTheCardWithoutMovingIt() {
+        // pr:modified не отображён ни на какую колонку: чек-лист обновится, а карточка
+        // останется там, куда её поставил статус ревьюера.
+        given(pr(30, "OPEN", 1, "commit-a", List.of()));
+        poller.runOnce();
+
+        givenTasks(30, task(1, "Заменить List на Set", "OPEN"));
+        assertThat(poller.runOnce()).isEqualTo(1);
+
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:modified");
+    }
+
+    @Test
+    void closingATaskAlsoRefreshesTheCard() {
+        given(pr(31, "OPEN", 1, "commit-a", List.of()));
+        givenTasks(31, task(1, "Заменить List на Set", "OPEN"));
+        poller.runOnce();
+
+        givenTasks(31, task(1, "Заменить List на Set", "RESOLVED"));
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:modified");
+    }
+
+    @Test
+    void anUnchangedTaskListRaisesNothing() {
+        given(pr(32, "OPEN", 1, "commit-a", List.of()));
+        givenTasks(32, task(1, "Заменить List на Set", "OPEN"));
+        poller.runOnce();
+
+        assertThat(poller.runOnce()).isZero();
+    }
+
+    @Test
+    void anUnreadableTaskListLeavesTheLastKnownOneAlone() {
+        // Выдуманное «задач нет» стёрло бы чек-лист с карточки на первой же заминке.
+        given(pr(33, "OPEN", 1, "commit-a", List.of()));
+        givenTasks(33, task(1, "Заменить List на Set", "OPEN"));
+        poller.runOnce();
+
+        when(client.blockerComments(anyString(), anyString(), eq(33L), anyInt()))
+                .thenThrow(new IllegalStateException("bitbucket is down"));
+
+        assertThat(poller.runOnce()).isZero();
+    }
+
+    @Test
+    void tasksAreNotAskedAboutForClosedPullRequests() {
+        given(pr(34, "MERGED", 1, "commit-a", List.of()));
+
+        poller.runOnce();
+
+        verify(client, never()).blockerComments(anyString(), anyString(), anyLong(), anyInt());
+    }
+
+    @Test
     void theSyntheticPayloadCarriesEnoughToIdentifyTheRepository() {
         given(pr(11, "OPEN", 1, "commit-a", List.of()));
         poller.runOnce();
@@ -205,6 +264,15 @@ class BitbucketPrPollerTest {
     private void given(BitbucketPrEvent.PullRequest... pullRequests) {
         when(client.pullRequests(eq("LIZA"), eq("liza"), anyString(), anyString(), anyInt()))
                 .thenReturn(new BitbucketClient.PullRequestPage(List.of(pullRequests)));
+    }
+
+    private void givenTasks(long prId, BitbucketClient.BlockerComment... tasks) {
+        when(client.blockerComments(eq("LIZA"), eq("liza"), eq(prId), anyInt()))
+                .thenReturn(new BitbucketClient.BlockerComments(List.of(tasks)));
+    }
+
+    private static BitbucketClient.BlockerComment task(long id, String text, String state) {
+        return new BitbucketClient.BlockerComment(id, text, state);
     }
 
     private List<String> eventTypes() {

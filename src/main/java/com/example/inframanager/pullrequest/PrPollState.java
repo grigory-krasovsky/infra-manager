@@ -44,6 +44,14 @@ public class PrPollState {
     @Column(name = "reviewer_digest", length = 64)
     private String reviewerDigest;
 
+    /**
+     * Отпечаток списка задач. Отдельно от всего остального, потому что задачу можно
+     * добавить, закрыть или удалить, не тронув ни версию пул-реквеста, ни ветку, ни
+     * статусы ревьюеров: без этой колонки такое изменение не заметил бы никто.
+     */
+    @Column(name = "task_digest", length = 64)
+    private String taskDigest;
+
     @Column(name = "first_seen_at", nullable = false)
     private Instant firstSeenAt;
 
@@ -77,18 +85,24 @@ public class PrPollState {
         return reviewerDigest;
     }
 
+    public String getTaskDigest() {
+        return taskDigest;
+    }
+
     public Instant getFirstSeenAt() {
         return firstSeenAt;
     }
 
     /** Записывает только что сделанное наблюдение. Выжимка обрезается под размер колонки. */
-    public void observe(String state, Integer version, String latestCommit, String reviewerDigest) {
+    public void observe(String state, Integer version, String latestCommit, String reviewerDigest,
+                        String taskDigest) {
         this.state = state;
         this.version = version;
         this.latestCommit = latestCommit;
         this.reviewerDigest = reviewerDigest == null || reviewerDigest.length() <= 64
                 ? reviewerDigest
                 : reviewerDigest.substring(0, 64);
+        this.taskDigest = taskDigest;
         this.lastSeenAt = Instant.now();
     }
 }

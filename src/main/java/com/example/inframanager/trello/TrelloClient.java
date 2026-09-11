@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.service.annotation.DeleteExchange;
 import org.springframework.web.service.annotation.GetExchange;
 import org.springframework.web.service.annotation.PostExchange;
 import org.springframework.web.service.annotation.PutExchange;
@@ -50,6 +51,47 @@ public interface TrelloClient {
                             @RequestParam("name") String name,
                             @RequestParam("color") String color);
 
+    @GetExchange("/1/cards/{cardId}/checklists")
+    List<TrelloChecklist> cardChecklists(@PathVariable String cardId,
+                                         @RequestParam("key") String key,
+                                         @RequestParam("token") String token,
+                                         @RequestParam("checkItems") String checkItems,
+                                         @RequestParam("checkItem_fields") String checkItemFields,
+                                         @RequestParam("fields") String fields);
+
+    @PostExchange("/1/checklists")
+    TrelloChecklist createChecklist(@RequestParam("key") String key,
+                                    @RequestParam("token") String token,
+                                    @RequestParam("idCard") String cardId,
+                                    @RequestParam("name") String name);
+
+    @DeleteExchange("/1/checklists/{checklistId}")
+    void deleteChecklist(@PathVariable String checklistId,
+                         @RequestParam("key") String key,
+                         @RequestParam("token") String token);
+
+    @PostExchange("/1/checklists/{checklistId}/checkItems")
+    TrelloCheckItem createCheckItem(@PathVariable String checklistId,
+                                    @RequestParam("key") String key,
+                                    @RequestParam("token") String token,
+                                    @RequestParam("name") String name,
+                                    @RequestParam("checked") boolean checked,
+                                    @RequestParam("pos") String position);
+
+    /** Состояние пункта меняется через карточку, а не через чек-лист — так устроено API. */
+    @PutExchange("/1/cards/{cardId}/checkItem/{checkItemId}")
+    TrelloCheckItem updateCheckItem(@PathVariable String cardId,
+                                    @PathVariable String checkItemId,
+                                    @RequestParam("key") String key,
+                                    @RequestParam("token") String token,
+                                    @RequestParam("state") String state);
+
+    @DeleteExchange("/1/checklists/{checklistId}/checkItems/{checkItemId}")
+    void deleteCheckItem(@PathVariable String checklistId,
+                         @PathVariable String checkItemId,
+                         @RequestParam("key") String key,
+                         @RequestParam("token") String token);
+
     @PutExchange("/1/labels/{labelId}")
     TrelloLabel updateLabel(@PathVariable String labelId,
                             @RequestParam("key") String key,
@@ -81,6 +123,26 @@ public interface TrelloClient {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record TrelloMember(String id, String username, String fullName) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TrelloChecklist(String id, String name, List<TrelloCheckItem> checkItems) {
+
+        public List<TrelloCheckItem> items() {
+            return checkItems == null ? List.of() : checkItems;
+        }
+    }
+
+    /** @param state {@code complete} или {@code incomplete} */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TrelloCheckItem(String id, String name, String state) {
+
+        public static final String COMPLETE = "complete";
+        public static final String INCOMPLETE = "incomplete";
+
+        public boolean isComplete() {
+            return COMPLETE.equalsIgnoreCase(state);
+        }
     }
 
     /** {@code idLabels} и {@code idMembers} перечисляются через запятую — так их ждёт Trello. */

@@ -32,11 +32,15 @@ public class PrCardService implements InboundEventHandler {
     private static final Logger log = LoggerFactory.getLogger(PrCardService.class);
     private static final String DELETED_EVENT = "pr:deleted";
 
+    /** Пункт чек-листа — одна строка; всё, что длиннее, читают в Bitbucket. */
+    private static final int CHECKLIST_ITEM_LIMIT = 200;
+
     private final LifecycleProperties lifecycle;
     private final PrCardContentRenderer renderer;
     private final OutboundTaskService taskService;
     private final IssueKeyExtractor issueKeyExtractor;
     private final JiraEnricher jiraEnricher;
+    private final PrTaskReader taskReader;
     private final ObjectMapper objectMapper;
 
     public PrCardService(LifecycleProperties lifecycle,
@@ -44,12 +48,14 @@ public class PrCardService implements InboundEventHandler {
                          OutboundTaskService taskService,
                          IssueKeyExtractor issueKeyExtractor,
                          JiraEnricher jiraEnricher,
+                         PrTaskReader taskReader,
                          ObjectMapper objectMapper) {
         this.lifecycle = lifecycle;
         this.renderer = renderer;
         this.taskService = taskService;
         this.issueKeyExtractor = issueKeyExtractor;
         this.jiraEnricher = jiraEnricher;
+        this.taskReader = taskReader;
         this.objectMapper = objectMapper;
     }
 
@@ -97,6 +103,7 @@ public class PrCardService implements InboundEventHandler {
                 issueKey,
                 labelsFor(parsed, board.get()),
                 authorCandidates(parsed),
+                checklistFor(ref),
                 archive);
 
         // Ключуется по входящему событию, поэтому его повтор не поставит в очередь
@@ -125,6 +132,36 @@ public class PrCardService implements InboundEventHandler {
             labels.add(lifecycle.labelForBranch(event.targetBranch()));
         }
         return labels;
+    }
+
+    /**
+     * Задачи ревью как чек-лист: видно, что просили поправить и что уже закрыто.
+     * Колонку они не двигают — её определяет только статус ревьюера.
+     *
+     * @return пункты чек-листа либо null, если задачи спросить не удалось — тогда
+     *         чек-лист на карточке останется таким, каким был
+     */
+    private List<TrelloCardCommand.ChecklistItem> checklistFor(PullRequestRef ref) {
+        return taskReader.tasks(ref)
+                .map(tasks -> tasks.stream()
+                        .map(task -> new TrelloCardCommand.ChecklistItem(itemName(task), task.resolved()))
+                        .toList())
+                .orElse(null);
+    }
+
+    /**
+     * Текст задачи бывает в несколько абзацев, а пункт чек-листа — это одна строка.
+     * Берём начало: смысл замечания обычно в первой фразе, а подробности всё равно
+     * читают в Bitbucket.
+     */
+    private static String itemName(PrTask task) {
+        String text = task.text() == null ? "" : task.text().replaceAll("\\s+", " ").trim();
+        if (text.isEmpty()) {
+            return "Задача #" + task.id();
+        }
+        return text.length() <= CHECKLIST_ITEM_LIMIT
+                ? text
+                : text.substring(0, CHECKLIST_ITEM_LIMIT - 1).trim() + "…";
     }
 
     /** Сначала логин, потом отображаемое имя: логин из двух менее двусмысленный. */

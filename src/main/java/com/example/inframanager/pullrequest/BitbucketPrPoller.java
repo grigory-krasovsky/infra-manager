@@ -36,6 +36,7 @@ public class BitbucketPrPoller {
     private final BitbucketProperties properties;
     private final LifecycleProperties lifecycle;
     private final PrPollStateRepository stateRepository;
+    private final PrTaskReader taskReader;
     private final InboundEventIngestService ingestService;
     private final ObjectMapper objectMapper;
 
@@ -43,12 +44,14 @@ public class BitbucketPrPoller {
                              BitbucketProperties properties,
                              LifecycleProperties lifecycle,
                              PrPollStateRepository stateRepository,
+                             PrTaskReader taskReader,
                              InboundEventIngestService ingestService,
                              ObjectMapper objectMapper) {
         this.client = client;
         this.properties = properties;
         this.lifecycle = lifecycle;
         this.stateRepository = stateRepository;
+        this.taskReader = taskReader;
         this.ingestService = ingestService;
         this.objectMapper = objectMapper;
     }
@@ -92,13 +95,14 @@ public class BitbucketPrPoller {
         BitbucketPrEvent snapshot = new BitbucketPrEvent(null, null, pullRequest);
 
         PrPollState previous = stateRepository.find(ref).orElse(null);
-        String eventKey = deriveEvent(previous, snapshot);
+        String taskDigest = taskDigest(ref, snapshot, previous);
+        String eventKey = deriveEvent(previous, snapshot, taskDigest);
 
         // Заполняем до сохранения: id генерируется через IDENTITY, поэтому save() вставляет
         // строку сразу, а ещё не наблюдённая строка нарушила бы NOT NULL на state.
         PrPollState state = previous != null ? previous : new PrPollState(ref);
         state.observe(pullRequest.state(), pullRequest.version(),
-                snapshot.latestCommit(), snapshot.reviewerDigest());
+                snapshot.latestCommit(), snapshot.reviewerDigest(), taskDigest);
         if (previous == null) {
             stateRepository.save(state);
         }
@@ -108,7 +112,7 @@ public class BitbucketPrPoller {
         }
 
         String payload = objectMapper.writeValueAsString(new BitbucketPrEvent(eventKey, null, pullRequest));
-        String externalId = externalId(ref, eventKey, snapshot, pullRequest);
+        String externalId = externalId(ref, eventKey, snapshot, pullRequest, taskDigest);
         boolean ingested = ingestService.ingest(EventSource.BITBUCKET, externalId, eventKey, payload);
         if (ingested) {
             log.info("Reconstructed {} for {} from polling", eventKey, ref.asKey());
@@ -126,7 +130,7 @@ public class BitbucketPrPoller {
      * @return ключ события Bitbucket, который надо поднять, или null, если ничего
      *         заслуживающего реакции не изменилось
      */
-    private String deriveEvent(PrPollState previous, BitbucketPrEvent snapshot) {
+    private String deriveEvent(PrPollState previous, BitbucketPrEvent snapshot, String taskDigest) {
         String state = snapshot.state();
 
         if (previous == null) {
@@ -168,6 +172,12 @@ public class BitbucketPrPoller {
                 && !Objects.equals(previous.getVersion(), snapshot.pullRequest().version())) {
             return "pr:modified";
         }
+
+        // Задачи карточку не двигают — pr:modified не отображён ни на какую колонку, —
+        // но обновляют её содержимое, а значит и чек-лист.
+        if (changed(previous.getTaskDigest(), taskDigest)) {
+            return "pr:modified";
+        }
         return null;
     }
 
@@ -194,11 +204,27 @@ public class BitbucketPrPoller {
 
     /** Идентифицирует переход состояния: повторный опрос неизменившегося пул-реквеста даёт дубликат. */
     private String externalId(PullRequestRef ref, String eventKey, BitbucketPrEvent snapshot,
-                              BitbucketPrEvent.PullRequest pullRequest) {
+                              BitbucketPrEvent.PullRequest pullRequest, String taskDigest) {
         String fingerprint = String.join("|", ref.asKey(), eventKey,
                 String.valueOf(pullRequest.state()), String.valueOf(pullRequest.version()),
-                String.valueOf(snapshot.latestCommit()), String.valueOf(snapshot.reviewerDigest()));
+                String.valueOf(snapshot.latestCommit()), String.valueOf(snapshot.reviewerDigest()),
+                String.valueOf(taskDigest));
         return "poll:" + sha256(fingerprint);
+    }
+
+    /**
+     * Отпечаток задач — только у открытых пул-реквестов: у закрытого чек-лист уже
+     * ничего не решает, а запрос стоит вызова на каждый пул-реквест за проход.
+     *
+     * <p>Не удалось спросить — возвращаем прошлый отпечаток: выдуманное «задач больше
+     * нет» стёрло бы чек-лист с карточки на первой же заминке Bitbucket.
+     */
+    private String taskDigest(PullRequestRef ref, BitbucketPrEvent snapshot, PrPollState previous) {
+        String previousDigest = previous == null ? null : previous.getTaskDigest();
+        if (!"OPEN".equalsIgnoreCase(snapshot.state())) {
+            return previousDigest;
+        }
+        return taskReader.tasks(ref).map(PrTaskReader::digest).orElse(previousDigest);
     }
 
     /** Где открытому пул-реквесту место прямо сейчас — судя только по его ревьюерам. */
