@@ -56,6 +56,54 @@ infra-manager:
 Пока `TELEGRAM_ENABLED=false`, уведомления всё равно кладутся в `outbound_task`
 и помечаются `SKIPPED` — то есть пропажа видна в таблице, а не теряется молча.
 
+### Если `api.telegram.org` недоступен напрямую
+
+Выглядит это как `I/O error on POST` в `last_error` у задач `TELEGRAM`, которые
+досрочно кончились статусом `FAILED`. Лечится прокси — **только для Telegram**:
+
+```dotenv
+TELEGRAM_PROXY_HOST=host.docker.internal
+TELEGRAM_PROXY_PORT=8081
+TELEGRAM_PROXY_USERNAME=       # если прокси без авторизации — пусто
+TELEGRAM_PROXY_PASSWORD=
+```
+
+Общесистемные `https.proxyHost` и `HTTPS_PROXY` для этого не годятся принципиально:
+они увели бы в тот же прокси обращения к Bitbucket и Bamboo, а те живут в сети
+`192.168.0.x`, куда через внешний прокси хода нет. Поэтому прокси настраивается
+у клиента Telegram, а остальные интеграции его не видят.
+
+Две вещи, о которые тут спотыкаются:
+
+- **`host.docker.internal`, а не `localhost`.** Прокси обычно запущен на самой
+  машине, а `localhost` внутри контейнера — это сам контейнер.
+- **Только HTTP-прокси.** `java.net.http.HttpClient` не умеет SOCKS вообще. К https
+  он ходит через CONNECT-туннель, так что обычного HTTP-прокси достаточно. Если
+  наружу есть только SOCKS5, рядом поднимается мост, превращающий его в HTTP, —
+  например `gost` одной командой:
+
+  ```bash
+  docker run -d --name socks-bridge -p 8081:8081 --add-host host.docker.internal:host-gateway \
+    ginuerzh/gost -L http://:8081 -F socks5://host.docker.internal:1080
+  ```
+
+  и тогда `TELEGRAM_PROXY_HOST=host.docker.internal`, `TELEGRAM_PROXY_PORT=8081`.
+
+Проверить, что прокси виден из контейнера, до всякой отправки:
+
+```bash
+docker compose exec app wget -qO- -e use_proxy=yes -e http_proxy=http://host.docker.internal:8081 \
+  https://api.telegram.org/bot<TOKEN>/getMe
+```
+
+Задачи, которые уже кончились `FAILED`, сами не оживут — попытки исчерпаны.
+Вернуть их в очередь после того, как прокси заработал:
+
+```sql
+UPDATE outbound_task SET status = 'PENDING', attempts = 0, next_attempt_at = now()
+WHERE target = 'TELEGRAM' AND status = 'FAILED';
+```
+
 ## 2. Trello
 
 *Нужен для: карточек PR (фаза 4).*

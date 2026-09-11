@@ -118,6 +118,16 @@ infra-manager:
     # then marked SKIPPED, so the gap is visible in outbound_task.
     enabled: ${TELEGRAM_ENABLED:false}
     bot-token: ${TELEGRAM_BOT_TOKEN:}
+    # Прокси — только для Telegram, и это принципиально: Bitbucket и Bamboo живут
+    # во внутренней сети, так что общий прокси на всю JVM увёл бы в него и их.
+    # Пустой host означает «ходим напрямую».
+    # Годится только HTTP-прокси: java.net.http.HttpClient не умеет SOCKS. Если
+    # наружу есть лишь SOCKS5, рядом поднимается мост — см. docs/runbook.md.
+    proxy:
+      host: ${TELEGRAM_PROXY_HOST:}
+      port: ${TELEGRAM_PROXY_PORT:0}
+      username: ${TELEGRAM_PROXY_USERNAME:}
+      password: ${TELEGRAM_PROXY_PASSWORD:}
     # Chat ids are environment-specific, so they belong in the mounted config file
     # rather than here. See docs/runbook.md for how to find one.
     #   routes:
