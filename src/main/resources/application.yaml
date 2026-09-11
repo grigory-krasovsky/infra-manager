@@ -204,11 +204,14 @@ infra-manager:
   lifecycle:
     # Which repository mirrors to which board. Board ids are deployment-specific,
     # so this belongs in the mounted config file.
-    # Все четыре репозитория зеркалятся на одну доску «Задачи и PR'ы»: карточка
+    # Все три репозитория зеркалятся на одну доску «Задачи и PR'ы»: карточка
     # несёт имя репозитория в описании, а на бесплатном тарифе Trello доска —
     # ограниченный ресурс (10 на рабочее пространство).
-    # prefix — то, что стоит в начале заголовка карточки. Одна задача штатно
-    # порождает два PR (фронт и бэк), и различать их надо именно по проекту.
+    # prefix — то, что стоит в начале заголовка карточки и вешается на неё меткой.
+    # Одна задача штатно порождает два PR (фронт и бэк), и различать их надо
+    # именно по проекту.
+    # anccopier (ORVD) здесь не указан намеренно: пул-реквестов в нём не бывает,
+    # а перечисленные репозитории опрашиваются каждые две минуты.
     repos:
       - project-key: LIZA
         repo-slug: liza
@@ -221,10 +224,6 @@ infra-manager:
       - project-key: ORVD
         repo-slug: orvd
         prefix: ЦСВ
-        trello-board-id: "6aa25c1a2a2039431f2fc528"
-      - project-key: ORVD
-        repo-slug: anccopier
-        prefix: anccopier
         trello-board-id: "6aa25c1a2a2039431f2fc528"
     # List names must exist on the board; a missing one fails loudly rather than
     # silently leaving the card put. Events not listed here refresh the card's
