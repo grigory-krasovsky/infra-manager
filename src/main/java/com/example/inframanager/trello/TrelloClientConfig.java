@@ -3,6 +3,7 @@ package com.example.inframanager.trello;
 import java.net.http.HttpClient;
 
 import com.example.inframanager.outbound.OutboundTaskService;
+import com.example.inframanager.pullrequest.LifecycleProperties;
 import com.example.inframanager.pullrequest.PrCardLinkRepository;
 import com.example.inframanager.work.WorkerProperties;
 import org.slf4j.Logger;
@@ -31,10 +32,12 @@ public class TrelloClientConfig implements SchedulingConfigurer {
     private final TrelloProperties properties;
     private final WorkerProperties workerProperties;
     private final ObjectProvider<TrelloReconciliationPoller> reconciliationPoller;
+    private final ObjectProvider<TrelloCompletionPoller> completionPoller;
 
     public TrelloClientConfig(TrelloProperties properties,
                               WorkerProperties workerProperties,
-                              ObjectProvider<TrelloReconciliationPoller> reconciliationPoller) {
+                              ObjectProvider<TrelloReconciliationPoller> reconciliationPoller,
+                              ObjectProvider<TrelloCompletionPoller> completionPoller) {
         if (!StringUtils.hasText(properties.key()) || !StringUtils.hasText(properties.token())) {
             throw new IllegalStateException(
                     "infra-manager.trello.enabled=true requires TRELLO_KEY and TRELLO_TOKEN; "
@@ -43,6 +46,7 @@ public class TrelloClientConfig implements SchedulingConfigurer {
         this.properties = properties;
         this.workerProperties = workerProperties;
         this.reconciliationPoller = reconciliationPoller;
+        this.completionPoller = completionPoller;
     }
 
     @Bean
@@ -108,14 +112,33 @@ public class TrelloClientConfig implements SchedulingConfigurer {
                 client, listResolver, properties, linkRepository, taskService, objectMapper);
     }
 
+    @Bean
+    @ConditionalOnProperty(prefix = "infra-manager.trello.completion", name = "enabled", havingValue = "true")
+    TrelloCompletionPoller trelloCompletionPoller(TrelloListResolver listResolver,
+                                                  LifecycleProperties lifecycle,
+                                                  PrCardLinkRepository linkRepository,
+                                                  OutboundTaskService taskService,
+                                                  ObjectMapper objectMapper) {
+        return new TrelloCompletionPoller(
+                listResolver, lifecycle, properties, linkRepository, taskService, objectMapper);
+    }
+
     @Override
     public void configureTasks(ScheduledTaskRegistrar registrar) {
-        if (!workerProperties.schedulingEnabled() || !properties.reconciliation().enabled()) {
+        if (!workerProperties.schedulingEnabled()) {
             return;
         }
-        // Через provider, потому что поллер — это @Bean этого же класса.
-        registrar.addFixedDelayTask(
-                () -> reconciliationPoller.getObject().runOnce(), properties.reconciliation().interval());
-        log.info("Trello reconciliation scheduled every {}", properties.reconciliation().interval());
+        // Через provider, потому что поллеры — это @Bean'ы этого же класса.
+        if (properties.reconciliation().enabled()) {
+            registrar.addFixedDelayTask(
+                    () -> reconciliationPoller.getObject().runOnce(), properties.reconciliation().interval());
+            log.info("Trello reconciliation scheduled every {}", properties.reconciliation().interval());
+        }
+        if (properties.completion().enabled()) {
+            registrar.addFixedDelayTask(
+                    () -> completionPoller.getObject().runOnce(), properties.completion().interval());
+            log.info("Trello card completion scheduled every {}, after {} in the merged list",
+                    properties.completion().interval(), properties.completion().after());
+        }
     }
 }

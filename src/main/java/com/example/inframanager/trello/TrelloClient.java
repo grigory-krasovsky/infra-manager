@@ -151,8 +151,12 @@ public interface TrelloClient {
                              String idLabels, String idMembers) {
     }
 
+    /**
+     * {@code due} — срок в ISO-8601, {@code dueComplete} — отметка «выполнено». Ставятся
+     * только вместе: отметку без срока Trello принимает, но нигде не показывает.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     record UpdateCardRequest(String idList, String name, String desc, Boolean closed,
-                             String idLabels, String idMembers) {
+                             String idLabels, String idMembers, String due, Boolean dueComplete) {
     }
 }

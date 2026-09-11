@@ -21,7 +21,10 @@ public record TrelloCardCommand(
         /** Null означает «оставить карточку на месте и лишь обновить её содержимое». */
         String moveToListName,
 
-        /** Куда попадает карточка, которой ещё нет. Никогда не null. */
+        /**
+         * Куда попадает карточка, которой ещё нет. Null у команд, которые правят уже
+         * существующую карточку и создавать ничего не должны.
+         */
         String createInListName,
 
         String title,
@@ -52,7 +55,14 @@ public record TrelloCardCommand(
          */
         java.util.List<ChecklistItem> checklist,
 
-        boolean archive) {
+        boolean archive,
+
+        /**
+         * Не null — отметить карточку выполненной, проставив ей этот срок. Срок здесь не
+         * украшение: без него Trello хранит отметку, но не показывает её ни на карточке,
+         * ни на доске. Null — статус карточки не трогать.
+         */
+        java.time.Instant completeAsOf) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ChecklistItem(String name, boolean done) {

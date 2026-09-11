@@ -165,6 +165,7 @@ class TrelloChecklistSyncTest {
                 Map.of(), List.of(),
                 new TrelloProperties.Reconciliation(false, Duration.ofMinutes(15),
                         TrelloProperties.Reconciliation.OnDrift.LOG,
-                        TrelloProperties.Reconciliation.OnMissing.LOG));
+                        TrelloProperties.Reconciliation.OnMissing.LOG),
+                new TrelloProperties.Completion(false, Duration.ofHours(24), Duration.ofDays(7)));
     }
 }

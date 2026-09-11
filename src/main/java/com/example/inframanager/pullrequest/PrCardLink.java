@@ -45,6 +45,18 @@ public class PrCardLink {
     @Column(name = "issue_key", length = 64)
     private String issueKey;
 
+    /**
+     * Когда карточка попала в {@link #currentListId}. Отдельно от {@link #updatedAt},
+     * который двигает любая правка содержимого: «давно ли лежит в колонке» — это про
+     * перемещения, а не про переписанный заголовок.
+     */
+    @Column(name = "list_entered_at")
+    private Instant listEnteredAt;
+
+    /** Когда карточку отметили в Trello выполненной; null — не отмечена. */
+    @Column(name = "completed_at")
+    private Instant completedAt;
+
     @Column(nullable = false)
     private boolean archived;
 
@@ -107,10 +119,30 @@ public class PrCardLink {
         return archived;
     }
 
+    public Instant getListEnteredAt() {
+        return listEnteredAt;
+    }
+
+    public Instant getCompletedAt() {
+        return completedAt;
+    }
+
     public void recordCard(String cardId, String listId, boolean archived) {
+        if (listId != null && !listId.equals(this.currentListId)) {
+            this.listEnteredAt = Instant.now();
+            // Карточка переехала, и прежняя отметка о выполнении к новой колонке
+            // отношения не имеет: отсчёт начинается заново.
+            this.completedAt = null;
+        }
         this.trelloCardId = cardId;
         this.currentListId = listId;
         this.archived = archived;
+        touch();
+    }
+
+    /** Запоминает, что карточка уже отмечена выполненной, — чтобы не отмечать её каждые сутки заново. */
+    public void markCompleted() {
+        this.completedAt = Instant.now();
         touch();
     }
 

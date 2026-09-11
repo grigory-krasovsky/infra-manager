@@ -1,6 +1,9 @@
 package com.example.inframanager.trello;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import com.example.inframanager.outbound.OutboundTarget;
@@ -83,9 +86,13 @@ public class TrelloSender implements OutboundTaskSender {
     }
 
     private void createCard(TrelloCardCommand command, PrCardLink link) {
-        if (command.archive()) {
-            // Архивировать нечего: PR удалили раньше, чем мы успели его отзеркалить.
-            log.debug("Skipping archive for {} -- no card was ever created", command.pullRequest().asKey());
+        if (command.archive() || command.title() == null) {
+            // Создавать нечего: либо PR удалили раньше, чем мы успели его отзеркалить,
+            // либо это правка существующей карточки — перемещение сверкой, отметка о
+            // выполнении, — а карточки к моменту отправки уже нет. Завести вместо неё
+            // безымянную хуже, чем не делать ничего.
+            log.debug("Skipping {} for {} -- no card was ever created",
+                    command.archive() ? "archive" : "update", command.pullRequest().asKey());
             return;
         }
 
@@ -124,20 +131,36 @@ public class TrelloSender implements OutboundTaskSender {
         return ids.isEmpty() ? null : String.join(",", ids);
     }
 
+    /**
+     * Срок для Trello. Округляется до секунды: Postgres хранит момент с точностью до
+     * микросекунд, а в сроке карточки эти знаки — мусор, который Trello ещё и может не
+     * принять.
+     */
+    private static String isoSeconds(Instant moment) {
+        return DateTimeFormatter.ISO_INSTANT.format(moment.truncatedTo(ChronoUnit.SECONDS));
+    }
+
     private void updateCard(TrelloCardCommand command, PrCardLink link) {
         String listId = command.moveToListName() == null
                 ? null
                 : listResolver.listId(command.boardId(), command.moveToListName());
+        boolean complete = command.completeAsOf() != null;
 
         client.updateCard(link.getTrelloCardId(), properties.key(), properties.token(),
                 new TrelloClient.UpdateCardRequest(listId, command.title(), command.description(),
-                        command.archive(), labelIds(command), memberIds(command)));
+                        command.archive(), labelIds(command), memberIds(command),
+                        complete ? isoSeconds(command.completeAsOf()) : null,
+                        complete ? Boolean.TRUE : null));
 
         link.recordCard(link.getTrelloCardId(),
                 listId != null ? listId : link.getCurrentListId(),
                 command.archive());
+        if (complete) {
+            link.markCompleted();
+        }
         checklistSync.sync(link.getTrelloCardId(), command.checklist());
-        log.info("Updated Trello card {} for {}{}", link.getTrelloCardId(), command.pullRequest().asKey(),
-                command.moveToListName() == null ? "" : " -> list '" + command.moveToListName() + "'");
+        log.info("Updated Trello card {} for {}{}{}", link.getTrelloCardId(), command.pullRequest().asKey(),
+                command.moveToListName() == null ? "" : " -> list '" + command.moveToListName() + "'",
+                complete ? " (complete)" : "");
     }
 }

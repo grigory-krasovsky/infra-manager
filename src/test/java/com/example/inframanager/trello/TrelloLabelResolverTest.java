@@ -137,6 +137,7 @@ class TrelloLabelResolverTest {
                 Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofMinutes(10), Map.of(), colours,
                 new TrelloProperties.Reconciliation(false, Duration.ofMinutes(15),
                         TrelloProperties.Reconciliation.OnDrift.LOG,
-                        TrelloProperties.Reconciliation.OnMissing.LOG));
+                        TrelloProperties.Reconciliation.OnMissing.LOG),
+                new TrelloProperties.Completion(false, Duration.ofHours(24), Duration.ofDays(7)));
     }
 }

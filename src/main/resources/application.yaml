@@ -217,6 +217,14 @@ infra-manager:
       on-drift: log
       # log = report; forget = drop the card id so the next event creates a new card.
       on-missing: log
+    completion:
+      # Карточка, пролежавшая в колонке влитых (той, куда её кладёт pr:merged) дольше
+      # after, отмечается в Trello выполненной и остаётся на месте. Вместе с отметкой
+      # ей проставляется срок — момент попадания в колонку: без срока Trello отметку
+      # хранит, но нигде не показывает.
+      enabled: ${TRELLO_COMPLETION_ENABLED:false}
+      interval: 24h
+      after: 7d
 
   lifecycle:
     # Which repository mirrors to which board. Board ids are deployment-specific,

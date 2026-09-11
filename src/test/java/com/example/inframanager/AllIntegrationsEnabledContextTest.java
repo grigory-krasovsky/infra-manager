@@ -7,6 +7,7 @@ import com.example.inframanager.notify.TelegramClient;
 import com.example.inframanager.pullrequest.BitbucketClient;
 import com.example.inframanager.pullrequest.BitbucketPrPoller;
 import com.example.inframanager.trello.TrelloClient;
+import com.example.inframanager.trello.TrelloCompletionPoller;
 import com.example.inframanager.trello.TrelloReconciliationPoller;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "infra-manager.trello.key=test-key",
         "infra-manager.trello.token=test-token",
         "infra-manager.trello.reconciliation.enabled=true",
+        "infra-manager.trello.completion.enabled=true",
 
         "infra-manager.jira.enabled=true",
         "infra-manager.jira.base-url=https://jira.invalid",
@@ -80,6 +82,7 @@ class AllIntegrationsEnabledContextTest {
     void everyPollerIsWiredWhenItsModeIsOn() {
         assertThat(context.getBean(BambooDeploymentPoller.class)).isNotNull();
         assertThat(context.getBean(TrelloReconciliationPoller.class)).isNotNull();
+        assertThat(context.getBean(TrelloCompletionPoller.class)).isNotNull();
         assertThat(context.getBean(BitbucketPrPoller.class)).isNotNull();
     }
 

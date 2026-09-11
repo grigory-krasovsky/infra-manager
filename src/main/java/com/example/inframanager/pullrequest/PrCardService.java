@@ -104,7 +104,10 @@ public class PrCardService implements InboundEventHandler {
                 labelsFor(parsed, board.get()),
                 authorCandidates(parsed),
                 checklistFor(ref),
-                archive);
+                archive,
+                // Отметку о выполнении ставит суточный проход по возрасту карточки,
+                // а не событие: событие «неделя прошла» никто не присылает.
+                null);
 
         // Ключуется по входящему событию, поэтому его повтор не поставит в очередь
         // второе такое же обновление карточки.

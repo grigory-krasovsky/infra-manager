@@ -51,9 +51,30 @@ public record TrelloProperties(
          */
         @DefaultValue List<LabelColor> labelColors,
 
-        @DefaultValue Reconciliation reconciliation) {
+        @DefaultValue Reconciliation reconciliation,
+
+        @DefaultValue Completion completion) {
 
     public record LabelColor(String label, String color) {
+    }
+
+    /**
+     * Карточка, пролежавшая в колонке влитых дольше {@code after}, отмечается в Trello
+     * выполненной. Пул-реквест к этому моменту закрыт давно, и делать вид, что он ещё
+     * в работе, доске незачем.
+     *
+     * <p>Колонку карточка при этом не покидает: колонка отвечает на вопрос «чем
+     * кончилось», и от того, что прошла неделя, ответ не меняется.
+     */
+    public record Completion(
+
+            @DefaultValue("false") boolean enabled,
+
+            /** Возраст карточки меряется днями — чаще раза в сутки смотреть не на что. */
+            @DefaultValue("24h") Duration interval,
+
+            /** Сколько карточка должна пролежать в колонке, чтобы считаться завершённой. */
+            @DefaultValue("7d") Duration after) {
     }
 
     /**
