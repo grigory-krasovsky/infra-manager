@@ -13,9 +13,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -185,6 +189,76 @@ class BitbucketPrPollerTest {
     }
 
     @Test
+    void anOpenTaskIsSeenAsARequestToChangeSomething() {
+        // Кнопку «Needs work» жмут не всегда: ревьюер ставит задачи, статус при этом
+        // остаётся UNAPPROVED, а мерж всё равно заблокирован.
+        given(pr(30, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "UNAPPROVED", false))));
+        poller.runOnce();
+
+        givenOpenTasks(30, 3);
+        assertThat(poller.runOnce()).isEqualTo(1);
+
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:reviewer:changes_requested");
+    }
+
+    @Test
+    void closingTheLastTaskSendsThePullRequestBackToReview() {
+        given(pr(31, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "UNAPPROVED", false))));
+        givenOpenTasks(31, 2);
+        poller.runOnce();
+
+        givenOpenTasks(31, 0);
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:reviewer:changes_requested", "pr:reviewer:unapproved");
+    }
+
+    @Test
+    void anOpenTaskOutweighsAnApproval() {
+        // Влить всё равно нельзя, так что «Аппрув» был бы неправдой.
+        given(pr(32, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "APPROVED", true))));
+        givenOpenTasks(32, 1);
+
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:reviewer:changes_requested");
+    }
+
+    @Test
+    void aTaskCountThatDidNotChangeRaisesNothing() {
+        given(pr(33, "OPEN", 1, "commit-a", List.of()));
+        givenOpenTasks(33, 2);
+        poller.runOnce();
+
+        assertThat(poller.runOnce()).isZero();
+        assertThat(eventTypes()).containsExactly("pr:reviewer:changes_requested");
+    }
+
+    @Test
+    void tasksAreNotAskedAboutForClosedPullRequests() {
+        given(pr(34, "MERGED", 1, "commit-a", List.of()));
+
+        poller.runOnce();
+
+        verify(client, never()).blockerComments(anyString(), anyString(), anyLong(), anyBoolean());
+    }
+
+    @Test
+    void anUnreadableTaskCountLeavesTheLastKnownOneAlone() {
+        // Выдумать «задач нет» значило бы утащить карточку из «запрошены изменения»
+        // обратно в ревью на первой же заминке Bitbucket.
+        given(pr(35, "OPEN", 1, "commit-a", List.of()));
+        givenOpenTasks(35, 2);
+        poller.runOnce();
+
+        when(client.blockerComments(anyString(), anyString(), eq(35L), anyBoolean()))
+                .thenThrow(new IllegalStateException("bitbucket is down"));
+
+        assertThat(poller.runOnce()).isZero();
+        assertThat(eventTypes()).containsExactly("pr:reviewer:changes_requested");
+    }
+
+    @Test
     void theSyntheticPayloadCarriesEnoughToIdentifyTheRepository() {
         given(pr(11, "OPEN", 1, "commit-a", List.of()));
         poller.runOnce();
@@ -205,6 +279,11 @@ class BitbucketPrPollerTest {
     private void given(BitbucketPrEvent.PullRequest... pullRequests) {
         when(client.pullRequests(eq("LIZA"), eq("liza"), anyString(), anyString(), anyInt()))
                 .thenReturn(new BitbucketClient.PullRequestPage(List.of(pullRequests)));
+    }
+
+    private void givenOpenTasks(long prId, int open) {
+        when(client.blockerComments(eq("LIZA"), eq("liza"), eq(prId), anyBoolean()))
+                .thenReturn(new BitbucketClient.BlockerComments(open));
     }
 
     private List<String> eventTypes() {

@@ -92,13 +92,14 @@ public class BitbucketPrPoller {
         BitbucketPrEvent snapshot = new BitbucketPrEvent(null, null, pullRequest);
 
         PrPollState previous = stateRepository.find(ref).orElse(null);
-        String eventKey = deriveEvent(previous, snapshot);
+        int openTasks = openTasks(ref, snapshot, previous);
+        String eventKey = deriveEvent(previous, snapshot, openTasks);
 
         // Заполняем до сохранения: id генерируется через IDENTITY, поэтому save() вставляет
         // строку сразу, а ещё не наблюдённая строка нарушила бы NOT NULL на state.
         PrPollState state = previous != null ? previous : new PrPollState(ref);
         state.observe(pullRequest.state(), pullRequest.version(),
-                snapshot.latestCommit(), snapshot.reviewerDigest());
+                snapshot.latestCommit(), snapshot.reviewerDigest(), openTasks);
         if (previous == null) {
             stateRepository.save(state);
         }
@@ -108,7 +109,7 @@ public class BitbucketPrPoller {
         }
 
         String payload = objectMapper.writeValueAsString(new BitbucketPrEvent(eventKey, null, pullRequest));
-        String externalId = externalId(ref, eventKey, snapshot, pullRequest);
+        String externalId = externalId(ref, eventKey, snapshot, pullRequest, openTasks);
         boolean ingested = ingestService.ingest(EventSource.BITBUCKET, externalId, eventKey, payload);
         if (ingested) {
             log.info("Reconstructed {} for {} from polling", eventKey, ref.asKey());
@@ -126,7 +127,7 @@ public class BitbucketPrPoller {
      * @return ключ события Bitbucket, который надо поднять, или null, если ничего
      *         заслуживающего реакции не изменилось
      */
-    private String deriveEvent(PrPollState previous, BitbucketPrEvent snapshot) {
+    private String deriveEvent(PrPollState previous, BitbucketPrEvent snapshot, int openTasks) {
         String state = snapshot.state();
 
         if (previous == null) {
@@ -136,7 +137,7 @@ public class BitbucketPrPoller {
             // Не слепо pr:opened: у открытого пул-реквеста уже есть статус ревью, и объявить
             // его только что открытым — значит вернуть карточку, лежащую в «нужны правки»,
             // обратно в колонку ревью.
-            return currentReviewEvent(snapshot);
+            return currentReviewEvent(snapshot, openTasks);
         }
 
         if (!Objects.equals(previous.getState(), state)) {
@@ -157,8 +158,12 @@ public class BitbucketPrPoller {
             return "pr:from_ref_updated";
         }
 
-        if (changed(previous.getReviewerDigest(), truncate(snapshot.reviewerDigest()))) {
-            if (snapshot.hasChangesRequested()) {
+        // Задачу открывают и закрывают, не трогая ни статус ревьюера, ни версию
+        // пул-реквеста, поэтому их число сравнивается отдельно: иначе такое изменение
+        // не заметил бы никто.
+        boolean reviewChanged = changed(previous.getReviewerDigest(), truncate(snapshot.reviewerDigest()));
+        if (reviewChanged || previous.getOpenTasks() != openTasks) {
+            if (snapshot.hasChangesRequested() || openTasks > 0) {
                 return "pr:reviewer:changes_requested";
             }
             return snapshot.hasApproval() ? "pr:reviewer:approved" : "pr:reviewer:unapproved";
@@ -194,16 +199,48 @@ public class BitbucketPrPoller {
 
     /** Идентифицирует переход состояния: повторный опрос неизменившегося пул-реквеста даёт дубликат. */
     private String externalId(PullRequestRef ref, String eventKey, BitbucketPrEvent snapshot,
-                              BitbucketPrEvent.PullRequest pullRequest) {
+                              BitbucketPrEvent.PullRequest pullRequest, int openTasks) {
         String fingerprint = String.join("|", ref.asKey(), eventKey,
                 String.valueOf(pullRequest.state()), String.valueOf(pullRequest.version()),
-                String.valueOf(snapshot.latestCommit()), String.valueOf(snapshot.reviewerDigest()));
+                String.valueOf(snapshot.latestCommit()), String.valueOf(snapshot.reviewerDigest()),
+                String.valueOf(openTasks));
         return "poll:" + sha256(fingerprint);
     }
 
-    /** Где открытому пул-реквесту место прямо сейчас — судя только по его ревьюерам. */
-    private String currentReviewEvent(BitbucketPrEvent snapshot) {
-        if (snapshot.hasChangesRequested()) {
+    /**
+     * Сколько у пул-реквеста незакрытых задач.
+     *
+     * <p>Спрашиваем только у открытых: у закрытого задачи уже ничего не решают, а запрос
+     * стоит отдельного вызова на каждый пул-реквест за проход.
+     *
+     * <p>Неудача — не повод выдумать событие: возвращаем прошлое значение, и опрос просто
+     * не заметит изменения вместо того, чтобы объявить несуществующее.
+     */
+    private int openTasks(PullRequestRef ref, BitbucketPrEvent snapshot, PrPollState previous) {
+        int previousTasks = previous == null ? 0 : previous.getOpenTasks();
+        if (!"OPEN".equalsIgnoreCase(snapshot.state())) {
+            return previousTasks;
+        }
+        try {
+            BitbucketClient.BlockerComments counts =
+                    client.blockerComments(ref.projectKey(), ref.repoSlug(), ref.prId(), true);
+            return counts == null ? previousTasks : counts.openCount();
+        } catch (Exception e) {
+            log.warn("Could not read open tasks of {}", ref.asKey(), e);
+            return previousTasks;
+        }
+    }
+
+    /**
+     * Где открытому пул-реквесту место прямо сейчас — по ревьюерам и незакрытым задачам.
+     *
+     * <p>Задачи считаются просьбой доработать наравне с «Needs work»: кнопку жмут не
+     * всегда, а три незакрытые задачи означают ровно то же самое — и мержу они мешают
+     * так же. Незакрытая задача перевешивает даже апрув: пул-реквест с ней всё равно
+     * не влить.
+     */
+    private String currentReviewEvent(BitbucketPrEvent snapshot, int openTasks) {
+        if (snapshot.hasChangesRequested() || openTasks > 0) {
             return "pr:reviewer:changes_requested";
         }
         return snapshot.hasApproval() ? "pr:reviewer:approved" : "pr:opened";

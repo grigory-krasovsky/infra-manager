@@ -35,11 +35,14 @@ docker compose logs -f app
 ```
 
 `scripts/up.ps1` (and `scripts/up.sh` for the Linux server) is `docker compose up -d
---build` plus a `docker image prune` filtered on this project's
-`org.opencontainers.image.title` label. Use it instead of calling compose directly:
-every rebuild untags the previous `infra-manager-app` image, and nothing ever reclaims
-those `<none>` images on their own. The label filter is what keeps the prune from
-touching other projects on the same machine.
+--build` wrapped in two cleanups, and is what you should run instead of calling compose
+directly. Before `up` it removes this project's containers in state `created` — an
+interrupted `up` leaves a half-created one holding the service name, and the next run
+dies on `Conflict. The container name ... is already in use`. After `up` it runs
+`docker image prune` filtered on this project's `org.opencontainers.image.title` label,
+because every rebuild untags the previous `infra-manager-app` image and nothing ever
+reclaims those `<none>` images on their own. The label filter is what keeps the prune
+from touching other projects on the same machine. `docs/runbook.md` has the details.
 
 ## Architecture
 
