@@ -52,6 +52,41 @@ class DeploymentMessageRendererTest {
     }
 
     @Test
+    void aLinkFromBambooStaysALinkInsteadOfShowingItsMarkup() {
+        // Bamboo кладёт в причину запуска готовый якорь; экранированный целиком, он
+        // приезжал в чат как «Child of <a href="...">LIZA-APIP-636</a>».
+        String text = renderer.render(event("SUCCESS", "Лиза API", "prod", "release-617", null, null,
+                "Child of <a href=\"https://bamboo.local/browse/LIZA-APIP-636\">LIZA-APIP-636</a>"));
+
+        assertThat(text).contains(
+                "Запуск: Child of <a href=\"https://bamboo.local/browse/LIZA-APIP-636\">LIZA-APIP-636</a>");
+    }
+
+    @Test
+    void textAroundTheLinkIsStillEscaped() {
+        assertThat(DeploymentMessageRenderer.renderTrigger(
+                "A & B <a href=\"https://bamboo.local/x\">K&Y</a> <b>bold</b>"))
+                .isEqualTo("A &amp; B <a href=\"https://bamboo.local/x\">K&amp;Y</a> bold");
+    }
+
+    @Test
+    void anHrefThatIsNotAnHttpUrlKeepsOnlyTheLabel() {
+        // Подставить в href что угодно — значит отдать Telegram разметку, которой мы
+        // не управляем; в худшем случае он ответит 400, и уведомление не дойдёт.
+        assertThat(DeploymentMessageRenderer.renderTrigger(
+                "Child of <a href=\"javascript:alert(1)\">KEY-1</a>"))
+                .isEqualTo("Child of KEY-1");
+    }
+
+    @Test
+    void aPlainSentenceIsUnchangedApartFromEscaping() {
+        assertThat(DeploymentMessageRenderer.renderTrigger("Manual run by krasovsky"))
+                .isEqualTo("Manual run by krasovsky");
+        assertThat(DeploymentMessageRenderer.renderTrigger("a < b & c"))
+                .isEqualTo("a &lt; b &amp; c");
+    }
+
+    @Test
     void subMinuteDurationsDropTheMinutesPart() {
         assertThat(DeploymentMessageRenderer.formatDuration(Duration.ofSeconds(9))).isEqualTo("9 с");
         assertThat(DeploymentMessageRenderer.formatDuration(Duration.ofSeconds(60))).isEqualTo("1 мин 0 с");
