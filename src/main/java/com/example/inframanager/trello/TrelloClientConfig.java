@@ -137,7 +137,7 @@ public class TrelloClientConfig implements SchedulingConfigurer {
         if (properties.completion().enabled()) {
             registrar.addFixedDelayTask(
                     () -> completionPoller.getObject().runOnce(), properties.completion().interval());
-            log.info("Trello card completion scheduled every {}, after {} in the merged list",
+            log.info("Trello card completion scheduled every {}, for pull requests closed over {} ago",
                     properties.completion().interval(), properties.completion().after());
         }
     }
