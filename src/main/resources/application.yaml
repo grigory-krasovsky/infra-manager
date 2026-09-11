@@ -121,9 +121,10 @@ infra-manager:
     # Прокси — только для Telegram, и это принципиально: Bitbucket и Bamboo живут
     # во внутренней сети, так что общий прокси на всю JVM увёл бы в него и их.
     # Пустой host означает «ходим напрямую».
-    # Годится только HTTP-прокси: java.net.http.HttpClient не умеет SOCKS. Если
-    # наружу есть лишь SOCKS5, рядом поднимается мост — см. docs/runbook.md.
+    # type: http | socks5 — угадать нельзя, от типа зависит сам способ ходить.
+    # Авторизация (username/password) поддержана только для http.
     proxy:
+      type: ${TELEGRAM_PROXY_TYPE:http}
       host: ${TELEGRAM_PROXY_HOST:}
       port: ${TELEGRAM_PROXY_PORT:0}
       username: ${TELEGRAM_PROXY_USERNAME:}

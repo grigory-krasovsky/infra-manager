@@ -62,9 +62,10 @@ infra-manager:
 досрочно кончились статусом `FAILED`. Лечится прокси — **только для Telegram**:
 
 ```dotenv
+TELEGRAM_PROXY_TYPE=socks5          # http | socks5
 TELEGRAM_PROXY_HOST=host.docker.internal
-TELEGRAM_PROXY_PORT=8081
-TELEGRAM_PROXY_USERNAME=       # если прокси без авторизации — пусто
+TELEGRAM_PROXY_PORT=1080
+TELEGRAM_PROXY_USERNAME=            # только для http; для socks5 оставить пустым
 TELEGRAM_PROXY_PASSWORD=
 ```
 
@@ -73,28 +74,27 @@ TELEGRAM_PROXY_PASSWORD=
 `192.168.0.x`, куда через внешний прокси хода нет. Поэтому прокси настраивается
 у клиента Telegram, а остальные интеграции его не видят.
 
-Две вещи, о которые тут спотыкаются:
+Три вещи, о которые тут спотыкаются:
 
 - **`host.docker.internal`, а не `localhost`.** Прокси обычно запущен на самой
   машине, а `localhost` внутри контейнера — это сам контейнер.
-- **Только HTTP-прокси.** `java.net.http.HttpClient` не умеет SOCKS вообще. К https
-  он ходит через CONNECT-туннель, так что обычного HTTP-прокси достаточно. Если
-  наружу есть только SOCKS5, рядом поднимается мост, превращающий его в HTTP, —
-  например `gost` одной командой:
+- **Тип обязателен и не угадывается.** HTTP-прокси получает CONNECT-запрос, SOCKS
+  работает уровнем ниже. От типа зависит и клиент: `java.net.http.HttpClient` не
+  умеет SOCKS вовсе, поэтому под `socks5` берётся фабрика поверх
+  `HttpURLConnection`. Указан не тот тип — соединение просто не установится.
+- **MTProto-прокси не подойдёт.** Ссылка вида `tg://proxy?server=…&secret=…` — это
+  транспорт клиентского протокола Telegram, он умеет говорить только с его
+  дата-центрами. Мы же ходим в Bot API обычным HTTPS, и MTProto его не пропустит.
+  Годятся только HTTP и SOCKS5 — те, у которых есть просто адрес и порт.
 
-  ```bash
-  docker run -d --name socks-bridge -p 8081:8081 --add-host host.docker.internal:host-gateway \
-    ginuerzh/gost -L http://:8081 -F socks5://host.docker.internal:1080
-  ```
-
-  и тогда `TELEGRAM_PROXY_HOST=host.docker.internal`, `TELEGRAM_PROXY_PORT=8081`.
-
-Проверить, что прокси виден из контейнера, до всякой отправки:
+Проверить маршрут до всякой отправки, прямо с хоста:
 
 ```bash
-docker compose exec app wget -qO- -e use_proxy=yes -e http_proxy=http://host.docker.internal:8081 \
-  https://api.telegram.org/bot<TOKEN>/getMe
+curl -x socks5h://HOST:PORT "https://api.telegram.org/bot<TOKEN>/getMe"   # socks5
+curl -x http://HOST:PORT    "https://api.telegram.org/bot<TOKEN>/getMe"   # http
 ```
+
+`{"ok":true,...}` означает, что прокси до Telegram доходит.
 
 Задачи, которые уже кончились `FAILED`, сами не оживут — попытки исчерпаны.
 Вернуть их в очередь после того, как прокси заработал:

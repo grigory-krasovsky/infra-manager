@@ -35,21 +35,33 @@ public record TelegramProperties(
         @DefaultValue List<Route> routes) {
 
     /**
-     * Только HTTP-прокси: {@code java.net.http.HttpClient} умеет исключительно его, а
-     * SOCKS не поддерживает вовсе. К https обращение идёт через CONNECT-туннель, так
-     * что обычный HTTP-прокси для Telegram годится.
+     * @param type     {@code http} или {@code socks5}. Это не оттенок одной настройки, а
+     *                 два разных механизма: HTTP-прокси получает CONNECT-запрос, SOCKS
+     *                 работает уровнем ниже, на сокете. От типа зависит, какой клиент
+     *                 вообще способен через него пройти, поэтому угадывать его мы не
+     *                 беремся.
+     * @param username только для HTTP-прокси; SOCKS-авторизация не поддержана за
+     *                 отсутствием спроса
      */
-    public record Proxy(String host,
+    public record Proxy(@DefaultValue("http") Type type,
+                        String host,
                         @DefaultValue("0") int port,
                         String username,
                         String password) {
+
+        public enum Type {
+
+            HTTP,
+
+            SOCKS5
+        }
 
         public boolean isConfigured() {
             return host != null && !host.isBlank() && port > 0;
         }
 
         public boolean needsAuthentication() {
-            return isConfigured() && username != null && !username.isBlank();
+            return isConfigured() && type == Type.HTTP && username != null && !username.isBlank();
         }
     }
 

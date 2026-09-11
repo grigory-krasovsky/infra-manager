@@ -3,6 +3,7 @@ package com.example.inframanager.notify;
 import java.net.Authenticator;
 import java.net.InetSocketAddress;
 import java.net.PasswordAuthentication;
+import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.http.HttpClient;
 
@@ -11,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.support.RestClientAdapter;
@@ -43,12 +46,9 @@ public class TelegramClientConfig {
 
     @Bean
     TelegramClient telegramClient(RestClient.Builder builder) {
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient());
-        requestFactory.setReadTimeout(properties.readTimeout());
-
         RestClient restClient = builder
                 .baseUrl(properties.baseUrl() + "/bot" + properties.botToken())
-                .requestFactory(requestFactory)
+                .requestFactory(requestFactory())
                 .build();
 
         return HttpServiceProxyFactory
@@ -63,12 +63,33 @@ public class TelegramClientConfig {
     }
 
     /**
-     * Клиент, которым ходим в Telegram, — при необходимости через прокси.
+     * Чем ходим в Telegram. Прокси настраивается здесь, а не системными свойствами JVM,
+     * потому что уводить в него надо один только Telegram: Bitbucket и Bamboo находятся
+     * во внутренней сети, и через внешний прокси они недостижимы.
      *
-     * <p>Прокси задаётся здесь, а не системными свойствами JVM, потому что уводить
-     * туда надо один только Telegram: Bitbucket и Bamboo находятся во внутренней сети,
-     * и через внешний прокси они недостижимы.
+     * <p>Тип прокси определяет и клиента. {@code java.net.http.HttpClient} — наш обычный —
+     * SOCKS не поддерживает вовсе, поэтому для SOCKS берётся фабрика поверх
+     * {@code HttpURLConnection}: она открывает соединение через {@link java.net.Proxy},
+     * а тот SOCKS понимает. Клиент получается постарше (HTTP/1.1 вместо HTTP/2), но для
+     * одного POST в Bot API это безразлично.
      */
+    ClientHttpRequestFactory requestFactory() {
+        TelegramProperties.Proxy proxy = properties.proxy();
+        if (proxy.isConfigured() && proxy.type() == TelegramProperties.Proxy.Type.SOCKS5) {
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setProxy(new Proxy(Proxy.Type.SOCKS,
+                    new InetSocketAddress(proxy.host(), proxy.port())));
+            factory.setConnectTimeout(properties.connectTimeout());
+            factory.setReadTimeout(properties.readTimeout());
+            log.info("Telegram calls go through SOCKS proxy {}:{}", proxy.host(), proxy.port());
+            return factory;
+        }
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient());
+        factory.setReadTimeout(properties.readTimeout());
+        return factory;
+    }
+
+    /** Клиент для прямого хода и для HTTP-прокси; SOCKS сюда не попадает — он не умеет. */
     HttpClient httpClient() {
         HttpClient.Builder builder = HttpClient.newBuilder()
                 .connectTimeout(properties.connectTimeout());
