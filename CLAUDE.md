@@ -29,9 +29,17 @@ Quote `-D` arguments in PowerShell so `#` and other tokens survive parsing.
 Running the tests requires a working Docker engine — every integration test starts a `postgres:17-alpine` container through Testcontainers.
 
 ```powershell
-docker compose up -d --build       # run the service and its database
+.\scripts\up.ps1                        # run the service and its database
+.\scripts\up.ps1 --force-recreate app   # arguments are passed through to compose
 docker compose logs -f app
 ```
+
+`scripts/up.ps1` (and `scripts/up.sh` for the Linux server) is `docker compose up -d
+--build` plus a `docker image prune` filtered on this project's
+`org.opencontainers.image.title` label. Use it instead of calling compose directly:
+every rebuild untags the previous `infra-manager-app` image, and nothing ever reclaims
+those `<none>` images on their own. The label filter is what keeps the prune from
+touching other projects on the same machine.
 
 ## Architecture
 

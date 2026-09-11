@@ -7,15 +7,32 @@
 
 ```powershell
 Copy-Item .env.example .env    # затем заполнить POSTGRES_PASSWORD
-docker compose up -d --build
+.\scripts\up.ps1
 ```
 
 Проверка: `curl http://localhost:8080/actuator/health` → `{"status":"UP"}`.
 
+### Почему скрипт, а не `docker compose up -d --build`
+
+Команда внутри та же, плюс уборка. Каждая пересборка снимает тег с предыдущего
+образа приложения, и тот остаётся в системе как `<none>` — по 350 МБ за штуку,
+и сам собой никогда не удаляется; за сутки правок их набирается два десятка.
+Скрипт после `up` делает `docker image prune` с фильтром по метке
+`org.opencontainers.image.title=infra-manager` (ставится в `Dockerfile`), поэтому
+трогает только безымянные образы этого проекта, а не чужие на той же машине.
+Аргументы пробрасываются в compose как есть. На Linux-сервере — `scripts/up.sh`.
+
+Если мусор уже накопился, разово:
+
+```powershell
+docker image prune -f                         # все безымянные образы на машине
+docker builder prune -f --filter until=168h   # кэш сборки, не использованный неделю
+```
+
 ### После правки `.env` — обязательно `--force-recreate`
 
 ```powershell
-docker compose up -d --force-recreate app
+.\scripts\up.ps1 --force-recreate app
 ```
 
 Переменные окружения фиксируются в момент создания контейнера, и `docker compose
