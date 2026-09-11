@@ -1,6 +1,7 @@
 package com.example.inframanager.trello;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -39,7 +40,21 @@ public record TrelloProperties(
          */
         @DefaultValue Map<String, String> members,
 
+        /**
+         * Имя метки → цвет из палитры Trello. Метку, которой здесь нет, красит первый
+         * свободный на доске цвет; названной же цвет и назначается, и восстанавливается,
+         * если он на доске другой — иначе метки, созданные до этой настройки, остались бы
+         * с прежними цветами навсегда.
+         *
+         * <p>Список пар, а не map: в именах меток встречаются точки и «/» (это ещё и
+         * имена веток), а такой ключ property Spring разбирает по-своему.
+         */
+        @DefaultValue List<LabelColor> labelColors,
+
         @DefaultValue Reconciliation reconciliation) {
+
+    public record LabelColor(String label, String color) {
+    }
 
     /**
      * Ловит то, чего односторонняя синхронизация не видит: карточку, которую кто-то

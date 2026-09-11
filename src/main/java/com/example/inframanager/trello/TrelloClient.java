@@ -50,6 +50,12 @@ public interface TrelloClient {
                             @RequestParam("name") String name,
                             @RequestParam("color") String color);
 
+    @PutExchange("/1/labels/{labelId}")
+    TrelloLabel updateLabel(@PathVariable String labelId,
+                            @RequestParam("key") String key,
+                            @RequestParam("token") String token,
+                            @RequestParam("color") String color);
+
     @PostExchange("/1/cards")
     TrelloCard createCard(@RequestParam("key") String key,
                           @RequestParam("token") String token,
