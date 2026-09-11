@@ -95,14 +95,18 @@ public class BitbucketPrPoller {
         BitbucketPrEvent snapshot = new BitbucketPrEvent(null, null, pullRequest);
 
         PrPollState previous = stateRepository.find(ref).orElse(null);
+        // Выжимка по ревьюерам хранится хэшем: в неё входят коммиты, и в отведённые
+        // колонке 64 символа она перестала помещаться, а обрезанная молча теряла бы
+        // изменения в хвосте — то есть у последних по алфавиту ревьюеров.
+        String reviewerDigest = sha256(snapshot.reviewerDigest());
         String taskDigest = taskDigest(ref, snapshot, previous);
-        String eventKey = deriveEvent(previous, snapshot, taskDigest);
+        String eventKey = deriveEvent(previous, snapshot, reviewerDigest, taskDigest);
 
         // Заполняем до сохранения: id генерируется через IDENTITY, поэтому save() вставляет
         // строку сразу, а ещё не наблюдённая строка нарушила бы NOT NULL на state.
         PrPollState state = previous != null ? previous : new PrPollState(ref);
         state.observe(pullRequest.state(), pullRequest.version(),
-                snapshot.latestCommit(), snapshot.reviewerDigest(), taskDigest);
+                snapshot.latestCommit(), reviewerDigest, taskDigest);
         if (previous == null) {
             stateRepository.save(state);
         }
@@ -112,7 +116,7 @@ public class BitbucketPrPoller {
         }
 
         String payload = objectMapper.writeValueAsString(new BitbucketPrEvent(eventKey, null, pullRequest));
-        String externalId = externalId(ref, eventKey, snapshot, pullRequest, taskDigest);
+        String externalId = externalId(ref, eventKey, snapshot, pullRequest, reviewerDigest, taskDigest);
         boolean ingested = ingestService.ingest(EventSource.BITBUCKET, externalId, eventKey, payload);
         if (ingested) {
             log.info("Reconstructed {} for {} from polling", eventKey, ref.asKey());
@@ -130,7 +134,8 @@ public class BitbucketPrPoller {
      * @return ключ события Bitbucket, который надо поднять, или null, если ничего
      *         заслуживающего реакции не изменилось
      */
-    private String deriveEvent(PrPollState previous, BitbucketPrEvent snapshot, String taskDigest) {
+    private String deriveEvent(PrPollState previous, BitbucketPrEvent snapshot,
+                               String reviewerDigest, String taskDigest) {
         String state = snapshot.state();
 
         if (previous == null) {
@@ -140,7 +145,7 @@ public class BitbucketPrPoller {
             // Не слепо pr:opened: у открытого пул-реквеста уже есть статус ревью, и объявить
             // его только что открытым — значит вернуть карточку, лежащую в «нужны правки»,
             // обратно в колонку ревью.
-            return currentReviewEvent(snapshot);
+            return currentReviewEvent(snapshot, "pr:opened");
         }
 
         if (!Objects.equals(previous.getState(), state)) {
@@ -156,16 +161,24 @@ public class BitbucketPrPoller {
             }
         }
 
-        // Новые коммиты важнее смены статуса ревью: пуш всё равно обесценивает ревью.
-        if (changed(previous.getLatestCommit(), snapshot.latestCommit())) {
-            return "pr:from_ref_updated";
+        // Дальше — только про открытый пул-реквест. У закрытого ход не за кем: карточка
+        // лежит в «влито» или «отклонено», и вернуть её оттуда в колонку ревью не должны
+        // ни вердикт ревьюера, ни правка заголовка. Проверка выглядит лишней ровно до
+        // того дня, когда выжимка по ревьюерам поменяет формат и разом «изменится» у всей
+        // истории репозитория, — тогда она одна и удержит доску на месте.
+        if (!"OPEN".equalsIgnoreCase(state)) {
+            return null;
         }
 
-        if (changed(previous.getReviewerDigest(), truncate(snapshot.reviewerDigest()))) {
-            if (snapshot.hasChangesRequested()) {
-                return "pr:reviewer:changes_requested";
-            }
-            return snapshot.hasApproval() ? "pr:reviewer:approved" : "pr:reviewer:unapproved";
+        // Пуш и вердикт ревьюера разбираются вместе, и спор между ними решает не порядок
+        // проверок, а коммит, на котором вердикт выставлен. Пуш обесценивает ревью, но
+        // только то, что было до него; ревьюер, посмотревший уже новый код, снова главнее.
+        boolean pushed = changed(previous.getLatestCommit(), snapshot.latestCommit());
+        boolean reviewChanged = changed(previous.getReviewerDigest(), reviewerDigest);
+        if (pushed || reviewChanged) {
+            // Вердикта о нынешнем коде нет — значит ход снова за ревьюером, и остаётся
+            // назвать причину: либо запушили, либо ревьюер снял свой статус.
+            return currentReviewEvent(snapshot, pushed ? "pr:from_ref_updated" : "pr:reviewer:unapproved");
         }
 
         if (snapshot.pullRequest().version() != null
@@ -204,10 +217,11 @@ public class BitbucketPrPoller {
 
     /** Идентифицирует переход состояния: повторный опрос неизменившегося пул-реквеста даёт дубликат. */
     private String externalId(PullRequestRef ref, String eventKey, BitbucketPrEvent snapshot,
-                              BitbucketPrEvent.PullRequest pullRequest, String taskDigest) {
+                              BitbucketPrEvent.PullRequest pullRequest, String reviewerDigest,
+                              String taskDigest) {
         String fingerprint = String.join("|", ref.asKey(), eventKey,
                 String.valueOf(pullRequest.state()), String.valueOf(pullRequest.version()),
-                String.valueOf(snapshot.latestCommit()), String.valueOf(snapshot.reviewerDigest()),
+                String.valueOf(snapshot.latestCommit()), String.valueOf(reviewerDigest),
                 String.valueOf(taskDigest));
         return "poll:" + sha256(fingerprint);
     }
@@ -227,20 +241,26 @@ public class BitbucketPrPoller {
         return taskReader.tasks(ref).map(PrTaskReader::digest).orElse(previousDigest);
     }
 
-    /** Где открытому пул-реквесту место прямо сейчас — судя только по его ревьюерам. */
-    private String currentReviewEvent(BitbucketPrEvent snapshot) {
-        if (snapshot.hasChangesRequested()) {
+    /**
+     * Где открытому пул-реквесту место прямо сейчас — судя по вердиктам его ревьюеров о
+     * нынешней голове ветки.
+     *
+     * <p>Вердикт, вынесенный до последнего пуша, не считается вовсе: «нужны правки»,
+     * сказанные про уже переписанный код, означают, что ход за ревьюером, а не за автором.
+     * Ровно поэтому статуса самого по себе мало — {@code NEEDS_WORK} висит и после того,
+     * как автор всё починил, и снимать его в Bitbucket никто не приучен.
+     *
+     * @param fallback чем назвать положение, когда о нынешнем коде не высказался никто
+     */
+    private String currentReviewEvent(BitbucketPrEvent snapshot, String fallback) {
+        if (snapshot.hasCurrentChangesRequested()) {
             return "pr:reviewer:changes_requested";
         }
-        return snapshot.hasApproval() ? "pr:reviewer:approved" : "pr:opened";
+        return snapshot.hasCurrentApproval() ? "pr:reviewer:approved" : fallback;
     }
 
     private static boolean changed(String previous, String current) {
         return current != null && !Objects.equals(previous, current);
-    }
-
-    private static String truncate(String value) {
-        return value == null || value.length() <= 64 ? value : value.substring(0, 64);
     }
 
     private static String sha256(String value) {

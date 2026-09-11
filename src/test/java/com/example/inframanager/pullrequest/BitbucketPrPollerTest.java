@@ -146,8 +146,8 @@ class BitbucketPrPollerTest {
     }
 
     @Test
-    void aPushOutranksASimultaneousReviewChange() {
-        // Пуш всё равно обесценивает ревью, так что карточке место обратно в ревью.
+    void aPushOutranksAReviewVerdictLeftBehindByIt() {
+        // Пуш обесценивает ревью, которое было до него, так что карточке место снова в ревью.
         given(pr(10, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "APPROVED", true))));
         poller.runOnce();
 
@@ -156,6 +156,71 @@ class BitbucketPrPollerTest {
 
         // При первой встрече сообщается об апруве, а не о простом открытии — см. тесты ниже.
         assertThat(eventTypes()).containsExactly("pr:reviewer:approved", "pr:from_ref_updated");
+    }
+
+    @Test
+    void aSecondNeedsWorkOnTheNewHeadTakesTheCardBack() {
+        // Тот самый цикл, ради которого в выжимку и добавлен коммит: статус ревьюера всё
+        // это время один и тот же NEEDS_WORK, снимать его никто не приучен.
+        given(pr(40, "OPEN", 1, "commit-a",
+                List.of(reviewer("ivan", "NEEDS_WORK", false, "commit-a"))));
+        poller.runOnce();
+
+        // Автор починил: вердикт остался прежним, но сказан он про уже переписанный код.
+        given(pr(40, "OPEN", 2, "commit-b",
+                List.of(reviewer("ivan", "NEEDS_WORK", false, "commit-a"))));
+        poller.runOnce();
+
+        // Ревьюер посмотрел новое и снова просит доработок.
+        given(pr(40, "OPEN", 2, "commit-b",
+                List.of(reviewer("ivan", "NEEDS_WORK", false, "commit-b"))));
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly(
+                "pr:reviewer:changes_requested", "pr:from_ref_updated", "pr:reviewer:changes_requested");
+    }
+
+    @Test
+    void anApprovalOfTheNewHeadSurvivesASimultaneousPush() {
+        // Пуш и апрув укладываются в один проход опроса сплошь и рядом: между ними бывают
+        // минуты. Раньше побеждал пуш, и апрув терялся насовсем — следующий проход
+        // разницы уже не видел.
+        given(pr(41, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "UNAPPROVED", false))));
+        poller.runOnce();
+
+        given(pr(41, "OPEN", 2, "commit-b",
+                List.of(reviewer("ivan", "APPROVED", true, "commit-b"))));
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:reviewer:approved");
+    }
+
+    @Test
+    void aClosedPullRequestStopsRaisingReviewEvents() {
+        // Карточка смерженного PR лежит в «Влито в ветку», и вытащить её оттуда обратно
+        // в ревью не должно ничто — в том числе смена формата самой выжимки.
+        given(pr(43, "OPEN", 1, "commit-a", List.of(reviewer("ivan", "UNAPPROVED", false))));
+        poller.runOnce();
+        given(pr(43, "MERGED", 2, "commit-a", List.of(reviewer("ivan", "UNAPPROVED", false))));
+        poller.runOnce();
+
+        given(pr(43, "MERGED", 3, "commit-b",
+                List.of(reviewer("ivan", "APPROVED", true, "commit-b"))));
+
+        assertThat(poller.runOnce()).isZero();
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:merged");
+    }
+
+    @Test
+    void firstSightOfANeedsWorkLeftBehindByAPushIsJustOpened() {
+        // Снимки сбросили, а в Bitbucket висит NEEDS_WORK по коду, которого уже нет.
+        // Карточке место в ревью: ход за ревьюером.
+        given(pr(42, "OPEN", 3, "commit-b",
+                List.of(reviewer("ivan", "NEEDS_WORK", false, "commit-a"))));
+
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:opened");
     }
 
     @Test
@@ -279,9 +344,15 @@ class BitbucketPrPollerTest {
         return jdbc.queryForList("SELECT event_type FROM inbound_event ORDER BY id", String.class);
     }
 
+    /** Ревьюер, о чьём последнем просмотренном коммите Bitbucket умолчал. */
     private BitbucketPrEvent.Reviewer reviewer(String name, String status, boolean approved) {
+        return reviewer(name, status, approved, null);
+    }
+
+    private BitbucketPrEvent.Reviewer reviewer(String name, String status, boolean approved,
+                                               String lastReviewedCommit) {
         return new BitbucketPrEvent.Reviewer(
-                new BitbucketPrEvent.User(name, name), status, approved);
+                new BitbucketPrEvent.User(name, name), status, approved, lastReviewedCommit);
     }
 
     private BitbucketPrEvent.PullRequest pr(long id, String state, int version,

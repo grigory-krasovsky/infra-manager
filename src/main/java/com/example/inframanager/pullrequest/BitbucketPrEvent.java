@@ -50,8 +50,15 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
     public record User(String name, String displayName) {
     }
 
+    /**
+     * @param lastReviewedCommit коммит, на котором ревьюер выставил свой нынешний статус.
+     *        Вопреки названию это не «последнее, что он видел»: поле появляется только
+     *        вместе с апрувом или «нужны правки» и потом за веткой не следует. Сравнение с
+     *        головой ветки и отвечает на вопрос, о текущем ли коде вынесен вердикт.
+     *        Отсутствует у того, кто статус не выставлял, и в теле вебхука.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Reviewer(User user, String status, Boolean approved) {
+    public record Reviewer(User user, String status, Boolean approved, String lastReviewedCommit) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -102,11 +109,15 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
     }
 
     /**
-     * Компактная выжимка: кто одобрил, а кто просит доработок.
+     * Компактная выжимка: кто одобрил, кто просит доработок и о каком коммите это сказано.
      *
      * <p>Хранится вместо списка ревьюеров, чтобы замечать смену статуса ревью, не держа
      * копию всех ревьюеров каждого пул-реквеста. Отсортирована, чтобы перестановка
      * списка на стороне Bitbucket не выглядела как изменение.
+     *
+     * <p>Коммит здесь не для красоты: повторное «нужны правки» статуса не меняет — он и
+     * так {@code NEEDS_WORK}, — и без коммита второй заход ревьюера ничем не отличался бы
+     * от первого. Ровно так карточка и застревала в колонке ревью, пока мяч был у автора.
      */
     public String reviewerDigest() {
         if (pullRequest == null || pullRequest.reviewers() == null) {
@@ -114,27 +125,41 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
         }
         return pullRequest.reviewers().stream()
                 .filter(reviewer -> reviewer != null && reviewer.user() != null)
-                .map(reviewer -> reviewer.user().name() + "=" + reviewer.status())
+                .map(reviewer -> reviewer.user().name() + "=" + reviewer.status()
+                        + (reviewer.lastReviewedCommit() == null ? "" : "@" + reviewer.lastReviewedCommit()))
                 .sorted()
                 .collect(java.util.stream.Collectors.joining(","));
     }
 
-    /** True, если хотя бы один ревьюер одобрил. */
-    public boolean hasApproval() {
-        if (pullRequest == null || pullRequest.reviewers() == null) {
-            return false;
-        }
-        return pullRequest.reviewers().stream()
-                .anyMatch(reviewer -> reviewer != null && Boolean.TRUE.equals(reviewer.approved()));
+    /** True, если хотя бы один ревьюер одобрил именно нынешнюю голову ветки. */
+    public boolean hasCurrentApproval() {
+        return anyReviewer(reviewer -> Boolean.TRUE.equals(reviewer.approved()));
     }
 
-    /** True, если хотя бы один ревьюер пометил пул-реквест как требующий доработки. */
-    public boolean hasChangesRequested() {
+    /** True, если хотя бы один ревьюер просит доработок именно по нынешней голове ветки. */
+    public boolean hasCurrentChangesRequested() {
+        return anyReviewer(reviewer -> "NEEDS_WORK".equalsIgnoreCase(reviewer.status()));
+    }
+
+    private boolean anyReviewer(java.util.function.Predicate<Reviewer> verdict) {
         if (pullRequest == null || pullRequest.reviewers() == null) {
             return false;
         }
         return pullRequest.reviewers().stream()
-                .anyMatch(reviewer -> reviewer != null && "NEEDS_WORK".equalsIgnoreCase(reviewer.status()));
+                .anyMatch(reviewer -> reviewer != null && verdict.test(reviewer) && concernsHead(reviewer));
+    }
+
+    /**
+     * Вынесен ли вердикт о том коде, который в ветке сейчас.
+     *
+     * <p>Неизвестный коммит считается нынешним. Bitbucket не присылает его ни в теле
+     * вебхука, ни у тех, кто статус не выставлял: трактовать «не знаю» как «устарело»
+     * значило бы объявить устаревшими вообще все вердикты на пути с вебхуками.
+     */
+    private boolean concernsHead(Reviewer reviewer) {
+        String head = latestCommit();
+        return reviewer.lastReviewedCommit() == null || head == null
+                || head.equals(reviewer.lastReviewedCommit());
     }
 
     public String targetBranch() {
