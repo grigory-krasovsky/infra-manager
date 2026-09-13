@@ -20,17 +20,18 @@ public interface BambooClient {
                                           @RequestParam("max-results") int maxResults);
 
     /**
-     * Сборка, породившая деплой. Нужна ровно за одним — за связанными задачами: сам
-     * результат деплоя о них не знает, а Bamboo вытаскивает их из сообщений коммитов.
+     * Сборка, породившая деплой. Нужна за тем, чего сам результат деплоя не знает: за
+     * связанными задачами, которые Bamboo вытаскивает из сообщений коммитов, и за самими
+     * коммитами — по ним видно, каким пул-реквестом сборка была вызвана.
      *
      * @param buildKey ключ вида {@code LIZA-APIP-636}
-     * @param expand   {@code jiraIssues}; без него Bamboo раздел не отдаёт
+     * @param expand   {@code jiraIssues,changes.change}; без него Bamboo разделы не отдаёт
      */
     @GetExchange("/rest/api/latest/result/{buildKey}")
     BuildResult buildResult(@PathVariable String buildKey, @RequestParam("expand") String expand);
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record BuildResult(JiraIssues jiraIssues) {
+    record BuildResult(JiraIssues jiraIssues, Changes changes) {
 
         @JsonIgnoreProperties(ignoreUnknown = true)
         record JiraIssues(List<Issue> issue) {
@@ -40,8 +41,21 @@ public interface BambooClient {
         record Issue(String key, String summary) {
         }
 
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record Changes(List<Change> change) {
+        }
+
+        /** Коммит сборки; {@code comment} — его сообщение целиком, со всеми переводами строк. */
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record Change(String comment) {
+        }
+
         public List<Issue> issues() {
             return jiraIssues == null || jiraIssues.issue() == null ? List.of() : jiraIssues.issue();
+        }
+
+        public List<Change> changeList() {
+            return changes == null || changes.change() == null ? List.of() : changes.change();
         }
     }
 

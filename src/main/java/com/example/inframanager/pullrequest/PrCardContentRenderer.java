@@ -101,11 +101,6 @@ public class PrCardContentRenderer {
      */
     private String prUrl(BitbucketPrEvent event, PullRequestRef ref) {
         return event.selfLink().orElseGet(() -> "%s/projects/%s/repos/%s/pull-requests/%d".formatted(
-                trimTrailingSlash(properties.effectiveBrowseUrl()),
-                ref.projectKey(), ref.repoSlug(), ref.prId()));
-    }
-
-    private static String trimTrailingSlash(String url) {
-        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+                properties.effectiveBrowseUrl(), ref.projectKey(), ref.repoSlug(), ref.prId()));
     }
 }

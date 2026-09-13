@@ -48,7 +48,9 @@ public record BitbucketProperties(
             @DefaultValue("50") int maxResults) {
     }
 
+    /** @return адрес для ссылок, без хвостового слэша: к нему всегда дописывают путь */
     public String effectiveBrowseUrl() {
-        return StringUtils.hasText(browseUrl) ? browseUrl : baseUrl;
+        String url = StringUtils.hasText(browseUrl) ? browseUrl : baseUrl;
+        return url == null ? "" : url.replaceAll("/+$", "");
     }
 }

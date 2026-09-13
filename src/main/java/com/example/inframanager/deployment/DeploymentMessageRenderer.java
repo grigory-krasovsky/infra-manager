@@ -5,7 +5,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,7 +44,8 @@ public class DeploymentMessageRenderer {
         }
     }
 
-    public String render(BambooDeploymentEvent event, List<DeploymentIssue> issues) {
+    public String render(BambooDeploymentEvent event, DeploymentSubject subject) {
+        DeploymentSubject named = subject == null ? DeploymentSubject.empty() : subject;
         String project = escape(event.projectNameOrUnknown());
         String environment = escape(event.environmentNameOrUnknown());
 
@@ -57,12 +57,17 @@ public class DeploymentMessageRenderer {
                     .append("</b> не прошёл (").append(escape(event.normalisedStatus())).append(')');
         }
 
-        for (DeploymentIssue issue : issues == null ? List.<DeploymentIssue>of() : issues) {
+        for (DeploymentIssue issue : named.issues()) {
             text.append("\nЗадача: ").append(renderIssue(issue));
         }
+        // Пул-реквест — замена задаче, а не добавка к ней: enricher и ищет его только
+        // тогда, когда задачи не нашлось.
+        for (DeploymentPullRequest pullRequest : named.pullRequests()) {
+            text.append("\nПул-реквест: ").append(renderPullRequest(pullRequest));
+        }
         // Имя версии Bamboo придумывает сам («release-617»), и о содержимом деплоя оно не
-        // говорит ничего — показываем его только когда задачу выяснить не удалось.
-        if ((issues == null || issues.isEmpty()) && StringUtils.hasText(event.deploymentVersionName())) {
+        // говорит ничего — показываем его только когда выяснить не удалось ничего другого.
+        if (named.isEmpty() && StringUtils.hasText(event.deploymentVersionName())) {
             text.append("\nВерсия: ").append(escape(event.deploymentVersionName()));
         }
 
@@ -83,6 +88,16 @@ public class DeploymentMessageRenderer {
                 : key;
         return StringUtils.hasText(issue.summary())
                 ? link + " · " + escape(truncate(issue.summary()))
+                : link;
+    }
+
+    private String renderPullRequest(DeploymentPullRequest pullRequest) {
+        String number = "#" + pullRequest.id();
+        String link = StringUtils.hasText(pullRequest.url())
+                ? "<a href=\"%s\">%s</a>".formatted(escape(pullRequest.url()), number)
+                : number;
+        return StringUtils.hasText(pullRequest.title())
+                ? link + " · " + escape(truncate(pullRequest.title()))
                 : link;
     }
 

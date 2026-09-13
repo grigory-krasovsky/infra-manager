@@ -25,20 +25,20 @@ public class DeploymentEventHandler implements InboundEventHandler {
 
     private final DeploymentRecordRepository repository;
     private final DeploymentMessageRenderer renderer;
-    private final DeploymentIssueEnricher issueEnricher;
+    private final DeploymentSubjectEnricher subjectEnricher;
     private final TelegramNotifier notifier;
     private final BambooProperties properties;
     private final ObjectMapper objectMapper;
 
     public DeploymentEventHandler(DeploymentRecordRepository repository,
                                   DeploymentMessageRenderer renderer,
-                                  DeploymentIssueEnricher issueEnricher,
+                                  DeploymentSubjectEnricher subjectEnricher,
                                   TelegramNotifier notifier,
                                   BambooProperties properties,
                                   ObjectMapper objectMapper) {
         this.repository = repository;
         this.renderer = renderer;
-        this.issueEnricher = issueEnricher;
+        this.subjectEnricher = subjectEnricher;
         this.notifier = notifier;
         this.properties = properties;
         this.objectMapper = objectMapper;
@@ -88,7 +88,7 @@ public class DeploymentEventHandler implements InboundEventHandler {
                 "deploy:" + parsed.deploymentResultId(),
                 // Никогда не бросает: уведомление без строки про задачу лучше, чем
                 // уведомление, застрявшее из-за недоступного Bamboo.
-                renderer.render(parsed, issueEnricher.issuesFor(parsed)));
+                renderer.render(parsed, subjectEnricher.subjectFor(parsed)));
         record.markNotified();
         log.info("Announced deployment {} of {} to {} ({})",
                 parsed.deploymentResultId(), record.getProjectName(),
