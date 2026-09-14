@@ -154,9 +154,39 @@ public interface TrelloClient {
     /**
      * {@code due} — срок в ISO-8601, {@code dueComplete} — отметка «выполнено». Ставятся
      * только вместе: отметку без срока Trello принимает, но нигде не показывает.
+     *
+     * @param cover {@link Cover} — поставить обложку, {@link Cover#NONE} — снять, null —
+     *              не трогать. Тип {@code Object} потому, что параметр у Trello и правда
+     *              разнотипный: объект или пустая строка.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     record UpdateCardRequest(String idList, String name, String desc, Boolean closed,
-                             String idLabels, String idMembers, String due, Boolean dueComplete) {
+                             String idLabels, String idMembers, String due, Boolean dueComplete,
+                             Object cover) {
+
+        /** Запрос, который меняет карточке одну лишь обложку. */
+        static UpdateCardRequest coverOnly(Object cover) {
+            return new UpdateCardRequest(null, null, null, null, null, null, null, null, cover);
+        }
+    }
+
+    /**
+     * Обложка — цветной фон карточки, видный прямо на доске.
+     *
+     * <p>Ставится только через {@code PUT}: у {@code POST /1/cards} такого параметра нет,
+     * поэтому обложку только что созданной карточке приходится досылать вторым запросом.
+     *
+     * @param size {@code normal} — полоса над заголовком, {@code full} — заливка всей
+     *             карточки, поверх которой идёт текст
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record Cover(String color, String size) {
+
+        /**
+         * «Снять обложку». Trello понимает это как пустое значение параметра, а не как
+         * объект: пустой объект она в разное время трактовала по-разному, пустая же
+         * строка убирала обложку всегда.
+         */
+        static final String NONE = "";
     }
 }

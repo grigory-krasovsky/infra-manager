@@ -30,10 +30,6 @@ public class TrelloLabelResolver {
 
     private static final Logger log = LoggerFactory.getLogger(TrelloLabelResolver.class);
 
-    /** Палитра меток Trello — других цветов у неё нет. */
-    static final List<String> COLORS = List.of(
-            "green", "yellow", "orange", "red", "purple", "blue", "sky", "lime", "pink", "black");
-
     private static final int LABEL_FETCH_LIMIT = 1000;
 
     private final TrelloClient client;
@@ -108,7 +104,7 @@ public class TrelloLabelResolver {
             return configured;
         }
         Set<String> used = labels(boardId, false).usedColors();
-        return COLORS.stream()
+        return TrelloColors.ALL.stream()
                 .filter(color -> !used.contains(color))
                 .findFirst()
                 .orElseGet(() -> hashedColor(name));
@@ -172,15 +168,10 @@ public class TrelloLabelResolver {
                     || entry.color() == null || entry.color().isBlank()) {
                 continue;
             }
-            String color = entry.color().trim().toLowerCase(Locale.ROOT);
-            if (!COLORS.contains(color)) {
-                // Trello молча отвергает неизвестный цвет; лучше не собраться при старте,
-                // чем выяснять это по метке, которую так и не создали.
-                throw new IllegalArgumentException(
-                        "infra-manager.trello.label-colors: '%s' is not a Trello label colour; allowed: %s"
-                                .formatted(entry.color(), COLORS));
-            }
-            colors.put(normalise(entry.label()), color);
+            // Trello молча отвергает неизвестный цвет; лучше не собраться при старте,
+            // чем выяснять это по метке, которую так и не создали.
+            colors.put(normalise(entry.label()),
+                    TrelloColors.requireKnown(entry.color(), "infra-manager.trello.label-colors"));
         }
         return Map.copyOf(colors);
     }
@@ -188,7 +179,7 @@ public class TrelloLabelResolver {
     /** Устойчиво к перезапускам: одно имя — один цвет. Запасной вариант, когда палитра занята. */
     static String hashedColor(String name) {
         int hash = normalise(name).hashCode();
-        return COLORS.get(Math.floorMod(hash, COLORS.size()));
+        return TrelloColors.ALL.get(Math.floorMod(hash, TrelloColors.ALL.size()));
     }
 
     private static String normalise(String name) {

@@ -62,6 +62,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "infra-manager.lifecycle.repos[0].repo-slug=backend",
         "infra-manager.lifecycle.repos[0].trello-board-id=board-1",
         "infra-manager.lifecycle.repos[0].prefix=BACK",
+        // Второй репозиторий на той же доске и с фоном — фон выборочен, и проверять
+        // надо обе стороны выбора: и что он появляется, и что его отсутствие снимает.
+        "infra-manager.lifecycle.repos[1].project-key=INFRA",
+        "infra-manager.lifecycle.repos[1].repo-slug=frontend",
+        "infra-manager.lifecycle.repos[1].trello-board-id=board-1",
+        "infra-manager.lifecycle.repos[1].prefix=FRONT",
+        "infra-manager.lifecycle.repos[1].cover=purple",
         // Объявлено здесь, а не унаследовано из application.yaml: имена колонок —
         // это то, что оказалось на конкретной доске, и переименование не должно ломать тесты.
         "infra-manager.lifecycle.event-to-list[0].event=pr:opened",
@@ -361,6 +368,58 @@ class BitbucketPrFlowTest {
         // Метка — для фильтра, а не подмена факта: куда именно поедет изменение,
         // в описании написано честно.
         assertThat(request.getValue().desc()).contains("feature/thing → postgres");
+    }
+
+    @Test
+    void aCardFromARepositoryWithAColourGetsItsCoverInASecondRequest() throws Exception {
+        deliver("pr:opened", payload(70, "Fix", "INFRA", "frontend"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.UpdateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
+        // Второй запрос, а не поле в первом: обложку понимает только PUT.
+        verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
+        assertThat(request.getValue().cover()).isEqualTo(new TrelloClient.Cover("purple", "normal"));
+        // И ничего кроме обложки: карточка только что создана ровно такой, какой нужно.
+        assertThat(request.getValue().idList()).isNull();
+        assertThat(request.getValue().name()).isNull();
+    }
+
+    @Test
+    void movingACardRepeatsItsCoverInTheSameRequest() throws Exception {
+        deliver("pr:opened", payload(71, "Fix", "INFRA", "frontend"));
+        drain();
+        deliver("pr:merged", payload(71, "Fix", "INFRA", "frontend"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.UpdateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
+        verify(trelloClient, org.mockito.Mockito.times(2))
+                .updateCard(eq("card-1"), anyString(), anyString(), request.capture());
+        // Перемещение несёт фон с собой: команда описывает желаемое состояние карточки
+        // целиком, а не разницу, — потому и повтор задачи ничего не портит.
+        TrelloClient.UpdateCardRequest move = request.getAllValues().get(1);
+        assertThat(move.idList()).isEqualTo("list-merged");
+        assertThat(move.cover()).isEqualTo(new TrelloClient.Cover("purple", "normal"));
+    }
+
+    @Test
+    void aRepositoryWithoutAColourLeavesItsCardsWithoutACover() throws Exception {
+        deliver("pr:opened", payload(72, "Fix"));
+        drain();
+
+        // Снимать у новой карточки нечего, так что и лишнего запроса нет.
+        verify(trelloClient, never()).updateCard(anyString(), anyString(), anyString(), any());
+
+        deliver("pr:merged", payload(72, "Fix"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.UpdateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
+        verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
+        // Пустое значение — это «снять»: цвет, убранный из конфигурации или повешенный
+        // руками, должен уйти и с доски.
+        assertThat(request.getValue().cover()).isEqualTo("");
     }
 
     private void drain() {

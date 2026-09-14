@@ -110,8 +110,32 @@ public class TrelloSender implements OutboundTaskSender {
                         labelIds(command), memberIds(command)));
 
         link.recordCard(card.id(), listId, false);
+        applyCover(card.id(), command);
         checklistSync.sync(card.id(), command.checklist());
         log.info("Created Trello card {} for {} in list '{}'", card.id(), command.pullRequest().asKey(), listName);
+    }
+
+    /**
+     * Обложка новой карточки ставится вторым запросом: {@code POST /1/cards} параметра
+     * {@code cover} не принимает, его понимает только {@code PUT}.
+     *
+     * <p>Снимать при этом нечего — у только что созданной карточки обложки и так нет, —
+     * поэтому «без фона» обходится без лишнего запроса.
+     *
+     * <p>Упасть этот запрос права не имеет: транзакция унесла бы с собой и связку с
+     * только что созданной карточкой, а повтор задачи завёл бы вторую такую же. Фон —
+     * косметика, и следующее же событие по этому пул-реквесту его поставит.
+     */
+    private void applyCover(String cardId, TrelloCardCommand command) {
+        if (!(coverFor(command) instanceof TrelloClient.Cover cover)) {
+            return;
+        }
+        try {
+            client.updateCard(cardId, properties.key(), properties.token(),
+                    TrelloClient.UpdateCardRequest.coverOnly(cover));
+        } catch (Exception e) {
+            log.warn("Could not set the {} cover on new Trello card {}", cover.color(), cardId, e);
+        }
     }
 
     /**
@@ -123,6 +147,19 @@ public class TrelloSender implements OutboundTaskSender {
         }
         List<String> ids = labelResolver.labelIds(command.boardId(), command.labels());
         return ids.isEmpty() ? null : String.join(",", ids);
+    }
+
+    /**
+     * @return обложка, {@link TrelloClient.Cover#NONE} — снять её, либо null — не трогать
+     */
+    private Object coverFor(TrelloCardCommand command) {
+        if (command.coverColor() == null) {
+            return null;
+        }
+        if (command.coverColor().isBlank()) {
+            return TrelloClient.Cover.NONE;
+        }
+        return new TrelloClient.Cover(command.coverColor(), properties.coverSize());
     }
 
     /**
@@ -156,7 +193,8 @@ public class TrelloSender implements OutboundTaskSender {
                 new TrelloClient.UpdateCardRequest(listId, command.title(), command.description(),
                         command.archive(), labelIds(command), memberIds(command),
                         complete ? isoSeconds(command.completeAsOf()) : null,
-                        complete ? Boolean.TRUE : null));
+                        complete ? Boolean.TRUE : null,
+                        coverFor(command)));
 
         link.recordCard(link.getTrelloCardId(),
                 listId != null ? listId : link.getCurrentListId(),

@@ -110,9 +110,10 @@ public class TrelloReconciliationPoller {
                 link.getTrelloBoardId(),
                 expected,
                 expected,
-                // Заголовок, описание, метки, участники и чек-лист остаются null, чтобы
-                // содержимое карточки не менялось; UpdateCardRequest пропускает null'ы,
-                // так что это чистое перемещение.
+                // Заголовок, описание, метки, обложка, участники и чек-лист остаются null,
+                // чтобы содержимое карточки не менялось; UpdateCardRequest пропускает
+                // null'ы, так что это чистое перемещение.
+                null,
                 null,
                 null,
                 null,

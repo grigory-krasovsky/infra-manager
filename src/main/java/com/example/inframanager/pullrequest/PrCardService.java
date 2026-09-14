@@ -110,6 +110,7 @@ public class PrCardService implements InboundEventHandler {
                 renderer.description(parsed, ref),
                 issueKey,
                 labelsFor(parsed, board.get()),
+                coverFor(board.get()),
                 authorCandidates(parsed),
                 checklistFor(ref),
                 archive,
@@ -162,6 +163,15 @@ public class PrCardService implements InboundEventHandler {
             labels.add(lifecycle.labelForBranch(event.targetBranch()));
         }
         return labels;
+    }
+
+    /**
+     * Фон карточки — по репозиторию. Репозиторию без настроенного цвета достаётся не
+     * «оставить как есть», а именно «снять»: убрали цвет из конфигурации — он должен уйти
+     * и с доски, иначе однажды покрашенные карточки останутся такими навсегда.
+     */
+    private static String coverFor(LifecycleProperties.RepoBoard repo) {
+        return repo.cover() == null ? TrelloCardCommand.NO_COVER : repo.cover();
     }
 
     /**

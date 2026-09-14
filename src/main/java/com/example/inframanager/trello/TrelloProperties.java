@@ -2,6 +2,7 @@ package com.example.inframanager.trello;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -51,9 +52,36 @@ public record TrelloProperties(
          */
         @DefaultValue List<LabelColor> labelColors,
 
+        /**
+         * Размер обложки — цветного фона карточки: {@code normal} — полоса над заголовком,
+         * {@code full} — заливка всей карточки, поверх которой идёт текст. Общий для всех
+         * обложек, потому что размером здесь ничего не сказано: разный размер у соседних
+         * карточек читается как сбой, а не как признак. Цвет же задаётся репозиторию,
+         * в {@code infra-manager.lifecycle.repos}.
+         */
+        @DefaultValue("normal") String coverSize,
+
         @DefaultValue Reconciliation reconciliation,
 
         @DefaultValue Completion completion) {
+
+    /** Других размеров обложки Trello не знает. */
+    static final List<String> COVER_SIZES = List.of("normal", "full");
+
+    /**
+     * Незнакомый размер Trello принимает и рисует обложку по-своему — то есть опечатка
+     * выглядит как работающая настройка. Ловим при старте, как и незнакомый цвет.
+     */
+    public TrelloProperties {
+        coverSize = coverSize == null || coverSize.isBlank()
+                ? "normal"
+                : coverSize.trim().toLowerCase(Locale.ROOT);
+        if (!COVER_SIZES.contains(coverSize)) {
+            throw new IllegalArgumentException(
+                    "infra-manager.trello.cover-size: '%s' is not a Trello cover size; allowed: %s"
+                            .formatted(coverSize, COVER_SIZES));
+        }
+    }
 
     public record LabelColor(String label, String color) {
     }

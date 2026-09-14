@@ -92,7 +92,7 @@ class TrelloLabelResolverTest {
 
     @Test
     void aFullPaletteStillProducesALabel() {
-        TrelloLabelResolver.COLORS.forEach(colour ->
+        TrelloColors.ALL.forEach(colour ->
                 given(new TrelloClient.TrelloLabel("id-" + colour, "branch-" + colour, colour)));
         TrelloLabelResolver resolver = resolver(List.of());
 
@@ -134,7 +134,7 @@ class TrelloLabelResolverTest {
 
     private static TrelloProperties properties(List<TrelloProperties.LabelColor> colours) {
         return new TrelloProperties(true, "https://api.trello.com", "key", "token",
-                Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofMinutes(10), Map.of(), colours,
+                Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofMinutes(10), Map.of(), colours, "normal",
                 new TrelloProperties.Reconciliation(false, Duration.ofMinutes(15),
                         TrelloProperties.Reconciliation.OnDrift.LOG,
                         TrelloProperties.Reconciliation.OnMissing.LOG),

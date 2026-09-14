@@ -3,6 +3,7 @@ package com.example.inframanager.pullrequest;
 import java.util.List;
 import java.util.Optional;
 
+import com.example.inframanager.trello.TrelloColors;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -55,8 +56,17 @@ public record LifecycleProperties(
      *               делят одну доску, а одна задача обычно порождает два пул-реквеста —
      *               фронт и бэк, — так что именно префикс разводит их карточки. Если не
      *               задан, берётся slug.
+     * @param cover  цвет обложки — фона, которым карточка видна на доске. Задаётся
+     *               репозиторием, а не событием: что с пул-реквестом происходит, и так
+     *               говорит колонка, а вот чей это репозиторий, на общей доске видно
+     *               только по метке — то есть по мелкой плашке. Пустой оставляет
+     *               карточки этого репозитория без фона.
      */
-    public record RepoBoard(String projectKey, String repoSlug, String trelloBoardId, String prefix) {
+    public record RepoBoard(String projectKey, String repoSlug, String trelloBoardId, String prefix, String cover) {
+
+        public RepoBoard {
+            cover = TrelloColors.requireKnown(cover, "infra-manager.lifecycle.repos[].cover");
+        }
 
         public String displayPrefix() {
             return prefix == null || prefix.isBlank() ? repoSlug : prefix;
