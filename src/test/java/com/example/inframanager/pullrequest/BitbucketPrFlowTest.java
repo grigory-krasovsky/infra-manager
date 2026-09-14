@@ -221,6 +221,13 @@ class BitbucketPrFlowTest {
                 ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
         verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
         assertThat(request.getValue().closed()).isTrue();
+        // И ничего кроме архивации: у удалённого пул-реквеста содержимого больше нет, и
+        // переписать карточку тем, что осталось в payload'е, значило бы стереть с неё всё
+        // полезное ровно перед тем, как убрать её с доски. Тем более что на пути с опросом
+        // в payload'е только репозиторий и номер — больше взять неоткуда.
+        assertThat(request.getValue().idList()).isNull();
+        assertThat(request.getValue().name()).isNull();
+        assertThat(request.getValue().desc()).isNull();
         assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 46))
                 .hasValueSatisfying(link -> assertThat(link.isArchived()).isTrue());
     }

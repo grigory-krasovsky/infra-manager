@@ -23,6 +23,19 @@ public interface BitbucketClient {
                                  @RequestParam("limit") int limit);
 
     /**
+     * Один пул-реквест. Задаётся ему ровно один вопрос — существует ли он ещё, — так что
+     * ценен здесь не ответ, а 404.
+     *
+     * <p>Со страницы со списком пул-реквест пропадает по двум несовместимым причинам: его
+     * удалили или он не поместился в {@code limit}. По самому списку их не различить, а
+     * спутать — значит отправить в архив карточку живого пул-реквеста.
+     */
+    @GetExchange("/rest/api/1.0/projects/{projectKey}/repos/{repoSlug}/pull-requests/{prId}")
+    BitbucketPrEvent.PullRequest pullRequest(@PathVariable String projectKey,
+                                             @PathVariable String repoSlug,
+                                             @PathVariable long prId);
+
+    /**
      * Задачи пул-реквеста — в терминах Bitbucket «блокирующие комментарии».
      *
      * <p>Отдельным запросом, потому что в списке пул-реквестов их нет ни в каком виде.

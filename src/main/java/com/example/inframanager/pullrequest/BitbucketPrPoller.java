@@ -7,6 +7,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.example.inframanager.event.EventSource;
 import com.example.inframanager.event.InboundEventIngestService;
@@ -14,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -32,6 +35,12 @@ import tools.jackson.databind.ObjectMapper;
 public class BitbucketPrPoller {
 
     private static final Logger log = LoggerFactory.getLogger(BitbucketPrPoller.class);
+
+    /**
+     * Единственное событие, которое сравнением пул-реквеста с его снимком не получить:
+     * сравнивать больше не с чем. Восстанавливается сверкой снимков со списком.
+     */
+    private static final String DELETED_EVENT = "pr:deleted";
 
     private final BitbucketClient client;
     private final BitbucketProperties properties;
@@ -80,14 +89,111 @@ public class BitbucketPrPoller {
         BitbucketClient.PullRequestPage page = client.pullRequests(
                 repo.projectKey(), repo.repoSlug(), "ALL", "NEWEST", properties.poll().maxResults());
 
-        List<BitbucketPrEvent.PullRequest> pullRequests =
-                page == null || page.values() == null ? List.of() : page.values();
+        if (page == null || page.values() == null) {
+            // Ответ без списка — это не «пул-реквестов нет», а «нам не ответили». Судить
+            // по нему о том, кто пропал, нельзя, поэтому проход по репозиторию на этом
+            // и кончается.
+            log.warn("Bitbucket returned no pull request list for {}/{}", repo.projectKey(), repo.repoSlug());
+            return 0;
+        }
+        List<BitbucketPrEvent.PullRequest> pullRequests = page.values();
 
         int emitted = 0;
         for (BitbucketPrEvent.PullRequest pullRequest : pullRequests) {
             emitted += observe(repo, pullRequest);
         }
+        return emitted + sweepDeleted(repo, pullRequests);
+    }
+
+    /**
+     * Ищет пул-реквесты, которые из Bitbucket исчезли: их удалили.
+     *
+     * <p>Всё остальное опрос узнаёт, сравнивая пул-реквест с его снимком, — но у
+     * удалённого сравнивать уже не с чем, и без этой сверки {@code pr:deleted} на пути с
+     * опросом не поднимался бы никогда. Карточка удалённого пул-реквеста так и оставалась
+     * бы на доске живой, а заведённый заново из той же ветки пул-реквест получал бы новый
+     * номер и, значит, вторую карточку — ровно так доска и двоится.
+     *
+     * <p>Отсутствие на странице само по себе ничего не доказывает: страница ограничена
+     * {@code max-results}, и старый пул-реквест уходит с неё просто от возраста. Поэтому
+     * о каждом подозреваемом спрашивается отдельно, и удалённым он считается только по
+     * ответу «такого нет». Ошибиться тут дороже, чем не заметить: архивация — это
+     * карточка, пропавшая с доски у всех сразу.
+     *
+     * @return сколько удалений восстановила эта сверка
+     */
+    private int sweepDeleted(LifecycleProperties.RepoBoard repo,
+                             List<BitbucketPrEvent.PullRequest> page) {
+        Set<Long> present = page.stream()
+                .filter(Objects::nonNull)
+                .map(BitbucketPrEvent.PullRequest::id)
+                .collect(Collectors.toSet());
+
+        int emitted = 0;
+        for (PrPollState state : stateRepository.findOpen(repo.projectKey(), repo.repoSlug())) {
+            if (present.contains(state.getPrId())) {
+                continue;
+            }
+            PullRequestRef ref = new PullRequestRef(repo.projectKey(), repo.repoSlug(), state.getPrId());
+            if (!gone(ref)) {
+                continue;
+            }
+            // Помечается независимо от того, новое это событие или уже записанное:
+            // пометка здесь — это то, что не даст спрашивать Bitbucket о нём каждые
+            // две минуты до конца времён.
+            state.markDeleted();
+            emitted += reportDeleted(ref);
+        }
         return emitted;
+    }
+
+    /**
+     * @return true, только если Bitbucket прямо ответил, что такого пул-реквеста нет.
+     *         Молчание и любая другая ошибка — это «не знаем», и карточка остаётся на
+     *         доске: следующий проход спросит снова.
+     */
+    private boolean gone(PullRequestRef ref) {
+        try {
+            client.pullRequest(ref.projectKey(), ref.repoSlug(), ref.prId());
+            return false;
+        } catch (HttpClientErrorException.NotFound e) {
+            return true;
+        } catch (Exception e) {
+            log.warn("Could not check whether {} still exists", ref.asKey(), e);
+            return false;
+        }
+    }
+
+    /** @return 1, если удаление записано впервые, иначе 0 */
+    private int reportDeleted(PullRequestRef ref) {
+        String payload = objectMapper.writeValueAsString(
+                new BitbucketPrEvent(DELETED_EVENT, null, deletedPullRequest(ref)));
+        // Без отпечатка состояния, в отличие от остальных событий: удалить пул-реквест
+        // можно один раз, и повтор прохода после сбоя должен попасть в тот же самый
+        // идентификатор, а не завести второе такое же событие.
+        String externalId = "poll:" + sha256(ref.asKey() + "|" + DELETED_EVENT);
+        boolean ingested = ingestService.ingest(EventSource.BITBUCKET, externalId, DELETED_EVENT, payload);
+        if (ingested) {
+            log.info("{} is gone from Bitbucket; reconstructed {}", ref.asKey(), DELETED_EVENT);
+        }
+        return ingested ? 1 : 0;
+    }
+
+    /**
+     * Payload об удалении — из снимка, а не из ответа Bitbucket: у удалённого
+     * пул-реквеста спрашивать уже нечего.
+     *
+     * <p>Здесь ровно то, чем карточка опознаётся: репозиторий и номер. Содержимого нет и
+     * быть не может, но удаление его и не трогает — карточка уезжает в архив в последнем
+     * известном виде.
+     */
+    private BitbucketPrEvent.PullRequest deletedPullRequest(PullRequestRef ref) {
+        BitbucketPrEvent.Repository repository = new BitbucketPrEvent.Repository(
+                ref.repoSlug(), ref.repoSlug(), new BitbucketPrEvent.Project(ref.projectKey(), ref.projectKey()));
+        return new BitbucketPrEvent.PullRequest(
+                ref.prId(), null, null, PrPollState.DELETED, null, null, null,
+                null, new BitbucketPrEvent.Ref(null, null, null, repository),
+                null, null, null, null);
     }
 
     private int observe(LifecycleProperties.RepoBoard repo, BitbucketPrEvent.PullRequest raw) {

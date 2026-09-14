@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.client.HttpClientErrorException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -18,6 +20,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -398,6 +401,103 @@ class BitbucketPrPollerTest {
     }
 
     @Test
+    void aPullRequestThatVanishedFromBitbucketIsSeenAsADeletion() {
+        // Единственное событие, которое сравнением снимков не получить: сравнивать не с
+        // чем. Без него карточка удалённого PR остаётся на доске, а заведённый заново из
+        // той же ветки PR получает вторую — так доска и двоится.
+        given(pr(70, "OPEN", 1, "commit-a", List.of()));
+        poller.runOnce();
+
+        vanished(70);
+
+        assertThat(poller.runOnce()).isEqualTo(1);
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:deleted");
+    }
+
+    @Test
+    void theDeletionPayloadCarriesEnoughToFindTheCard() {
+        given(pr(71, "OPEN", 1, "commit-a", List.of()));
+        poller.runOnce();
+
+        vanished(71);
+        poller.runOnce();
+
+        assertThat(payloads().get(1)).contains("LIZA").contains("liza").contains("71");
+    }
+
+    @Test
+    void aDeletionIsReportedOnceAndBitbucketIsNotAskedAgain() {
+        given(pr(72, "OPEN", 1, "commit-a", List.of()));
+        poller.runOnce();
+        vanished(72);
+        poller.runOnce();
+
+        assertThat(poller.runOnce()).isZero();
+
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:deleted");
+        // Второй вопрос о покойнике — это запрос в Bitbucket каждые две минуты навсегда.
+        verify(client, times(1)).pullRequest(anyString(), anyString(), eq(72L));
+    }
+
+    @Test
+    void aPullRequestMerelyOffThePageIsLeftAlone() {
+        // Страница ограничена max-results, и старый PR уходит с неё просто от возраста.
+        // Принять это за удаление — значит убрать с доски карточку живого PR.
+        given(pr(73, "OPEN", 1, "commit-a", List.of()));
+        poller.runOnce();
+
+        given();
+        when(client.pullRequest(eq("LIZA"), eq("liza"), eq(73L)))
+                .thenReturn(pr(73, "OPEN", 1, "commit-a", List.of()));
+
+        assertThat(poller.runOnce()).isZero();
+        assertThat(eventTypes()).containsExactly("pr:opened");
+    }
+
+    @Test
+    void anUnansweredExistenceCheckArchivesNothing() {
+        // «Не знаем» — не «удалён». Заминка Bitbucket не должна стоить карточки.
+        given(pr(74, "OPEN", 1, "commit-a", List.of()));
+        poller.runOnce();
+
+        given();
+        when(client.pullRequest(eq("LIZA"), eq("liza"), eq(74L)))
+                .thenThrow(new IllegalStateException("bitbucket is down"));
+
+        assertThat(poller.runOnce()).isZero();
+        assertThat(eventTypes()).containsExactly("pr:opened");
+    }
+
+    @Test
+    void aClosedPullRequestLeavingThePageIsNotEvenAskedAbout() {
+        // Карточка влитого PR уже лежит в конечной колонке, а закрытые уходят со
+        // страницы пачками: спрашивать о каждом — это лишний запрос на каждый проход.
+        given(pr(75, "OPEN", 1, "commit-a", List.of()));
+        poller.runOnce();
+        given(pr(75, "MERGED", 2, "commit-a", List.of()));
+        poller.runOnce();
+
+        given();
+
+        assertThat(poller.runOnce()).isZero();
+        verify(client, never()).pullRequest(anyString(), anyString(), eq(75L));
+    }
+
+    @Test
+    void anEmptyAnswerIsNotTakenForAnEmptyRepository() {
+        // Ответ без списка — это «нам не ответили», а не «пул-реквестов нет». Иначе один
+        // невнятный ответ Bitbucket отправил бы в архив всю доску разом.
+        given(pr(76, "OPEN", 1, "commit-a", List.of()));
+        poller.runOnce();
+
+        when(client.pullRequests(anyString(), anyString(), anyString(), anyString(), anyInt()))
+                .thenReturn(new BitbucketClient.PullRequestPage(null));
+
+        assertThat(poller.runOnce()).isZero();
+        verify(client, never()).pullRequest(anyString(), anyString(), anyLong());
+    }
+
+    @Test
     void theSyntheticPayloadCarriesEnoughToIdentifyTheRepository() {
         given(pr(11, "OPEN", 1, "commit-a", List.of()));
         poller.runOnce();
@@ -418,6 +518,14 @@ class BitbucketPrPollerTest {
     private void given(BitbucketPrEvent.PullRequest... pullRequests) {
         when(client.pullRequests(eq("LIZA"), eq("liza"), anyString(), anyString(), anyInt()))
                 .thenReturn(new BitbucketClient.PullRequestPage(List.of(pullRequests)));
+    }
+
+    /** Пул-реквест удалили: со страницы он пропал, а на прямой вопрос Bitbucket отвечает 404. */
+    private void vanished(long prId) {
+        given();
+        when(client.pullRequest(eq("LIZA"), eq("liza"), eq(prId)))
+                .thenThrow(HttpClientErrorException.create(
+                        HttpStatusCode.valueOf(404), "Not Found", null, null, null));
     }
 
     private void givenTasks(long prId, BitbucketClient.BlockerComment... tasks) {

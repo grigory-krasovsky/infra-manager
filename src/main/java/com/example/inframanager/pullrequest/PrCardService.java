@@ -88,7 +88,10 @@ public class PrCardService implements InboundEventHandler {
         }
 
         String eventKey = event.getEventType();
-        boolean archive = DELETED_EVENT.equals(eventKey);
+        if (DELETED_EVENT.equals(eventKey)) {
+            archive(ref, board.get(), event);
+            return;
+        }
 
         // «Не знаем» и «конфликтов нет» для заголовка одно и то же: предупреждать можно
         // только о выясненном. Выясняет это путь с опросом — он же кладёт ответ в payload.
@@ -113,20 +116,55 @@ public class PrCardService implements InboundEventHandler {
                 coverFor(board.get()),
                 authorCandidates(parsed),
                 checklistFor(ref),
-                archive,
+                false,
                 closedAt(eventKey, parsed),
                 // Отметку о выполнении ставит суточный проход по возрасту пул-реквеста,
                 // а не событие: событие «неделя прошла» никто не присылает.
                 null);
 
-        // Ключуется по входящему событию, поэтому его повтор не поставит в очередь
-        // второе такое же обновление карточки.
-        String dedupKey = "trello:%s:%s".formatted(ref.asKey(), event.getExternalId());
-        taskService.enqueue(OutboundTarget.TRELLO, "syncCard", dedupKey,
-                objectMapper.writeValueAsString(command));
+        enqueue(ref, event, command);
 
         log.info("Queued card sync for {} after {}{}", ref.asKey(), eventKey,
                 command.moveToListName() == null ? " (content only)" : " -> '" + command.moveToListName() + "'");
+    }
+
+    /**
+     * Удалённый пул-реквест: карточку в архив, содержимое не трогать.
+     *
+     * <p>Обновлять его нечем и незачем. На пути с опросом пул-реквеста уже нет, и в
+     * payload'е только репозиторий с номером — переписать ими карточку значило бы стереть
+     * с неё всё, чем она была полезна, ради пары секунд перед архивацией. Спрашивать про
+     * задачи и Jira тем более не о чем: это два запроса о том, чего не существует.
+     *
+     * <p>В архиве карточка сохраняет последний известный вид — ровно то, что нужно, если
+     * пул-реквест удалили по ошибке или если через неделю кто-то спросит, что там было.
+     */
+    private void archive(PullRequestRef ref, LifecycleProperties.RepoBoard board, InboundEvent event) {
+        TrelloCardCommand command = new TrelloCardCommand(
+                ref,
+                board.trelloBoardId(),
+                // Колонка, место создания, заголовок, описание, ключ задачи, метки, фон,
+                // участники и чек-лист — всё null: карточка уезжает в архив как есть.
+                // Карточку, которой ещё нет, такая команда не создаёт — отправитель
+                // отказывается заводить безымянную.
+                null, null, null, null, null, null, null, null, null,
+                true,
+                null,
+                null);
+
+        enqueue(ref, event, command);
+
+        log.info("Queued card archival for {} after {}", ref.asKey(), event.getEventType());
+    }
+
+    /**
+     * Ключуется по входящему событию, поэтому его повтор не поставит в очередь второе
+     * такое же обновление карточки.
+     */
+    private void enqueue(PullRequestRef ref, InboundEvent event, TrelloCardCommand command) {
+        String dedupKey = "trello:%s:%s".formatted(ref.asKey(), event.getExternalId());
+        taskService.enqueue(OutboundTarget.TRELLO, "syncCard", dedupKey,
+                objectMapper.writeValueAsString(command));
     }
 
     /**

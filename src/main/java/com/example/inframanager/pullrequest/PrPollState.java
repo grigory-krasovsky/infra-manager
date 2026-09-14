@@ -19,6 +19,18 @@ import jakarta.persistence.Table;
 @Table(name = "pr_poll_state")
 public class PrPollState {
 
+    /** Единственное состояние Bitbucket, которое нас интересует отдельно от остальных. */
+    public static final String OPEN = "OPEN";
+
+    /**
+     * Не состояние Bitbucket, а наша пометка: такого пул-реквеста там больше нет — удалили.
+     *
+     * <p>Строка остаётся вместо того, чтобы исчезнуть вместе с пул-реквестом, потому что
+     * исчезновение надо заметить ровно один раз. Без пометки каждый следующий проход
+     * заново спрашивал бы Bitbucket об одном и том же покойнике.
+     */
+    public static final String DELETED = "DELETED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -32,6 +44,7 @@ public class PrPollState {
     @Column(name = "pr_id", nullable = false)
     private long prId;
 
+    /** {@code OPEN}, {@code MERGED}, {@code DECLINED} — либо наш собственный {@link #DELETED}. */
     @Column(nullable = false, length = 32)
     private String state;
 
@@ -80,6 +93,10 @@ public class PrPollState {
         this.lastSeenAt = this.firstSeenAt;
     }
 
+    public long getPrId() {
+        return prId;
+    }
+
     public String getState() {
         return state;
     }
@@ -119,6 +136,18 @@ public class PrPollState {
                 : reviewerDigest.substring(0, 64);
         this.taskDigest = taskDigest;
         this.conflicted = conflicted;
+        this.lastSeenAt = Instant.now();
+    }
+
+    /**
+     * Записывает, что пул-реквеста в Bitbucket больше нет.
+     *
+     * <p>Остальные поля остаются как были: это последнее, что мы о нём знали, и
+     * затирать их нулями значило бы потерять единственный след удалённого пул-реквеста.
+     * {@code lastSeenAt} обновляется — «его нет» такое же наблюдение, как любое другое.
+     */
+    public void markDeleted() {
+        this.state = DELETED;
         this.lastSeenAt = Instant.now();
     }
 }
