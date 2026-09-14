@@ -26,6 +26,13 @@ public class PrCardContentRenderer {
     private static final Pattern LEADING_SEPARATORS = Pattern.compile("^[-_.:\\s]+");
 
     /**
+     * Знак того, что пул-реквест встал: влить его не даёт конфликт. Стоит в начале
+     * заголовка, потому что это единственное место на лице карточки, которое читают
+     * всегда, а метки и колонка уже заняты смыслом.
+     */
+    private static final String CONFLICT_MARKER = "⚠️ ";
+
+    /**
      * Собирает заголовок карточки.
      *
      * <p>Форма — {@code ПРЕФИКС · [KEY] о чём это}; если ключ задачи неизвестен, его
@@ -38,9 +45,12 @@ public class PrCardContentRenderer {
      * @param issueKey     ключ Jira, найденный в ветке или заголовке, либо null
      * @param issueSummary как эту задачу называет Jira, либо null, если Jira выключена,
      *                     недоступна или не знает такого ключа
+     * @param conflicted   установлено ли, что влить пул-реквест мешает конфликт; «не
+     *                     знаем» сюда приходит как false — предупреждать можно лишь о том,
+     *                     что выяснено
      */
     public String title(BitbucketPrEvent event, LifecycleProperties.RepoBoard repo,
-                        String issueKey, String issueSummary) {
+                        String issueKey, String issueSummary, boolean conflicted) {
         String rawTitle = event.pullRequest() == null || !StringUtils.hasText(event.pullRequest().title())
                 ? "(без заголовка)"
                 : event.pullRequest().title();
@@ -52,7 +62,7 @@ public class PrCardContentRenderer {
         String head = StringUtils.hasText(issueKey)
                 ? "%s · [%s]".formatted(repo.displayPrefix(), issueKey)
                 : "%s ·".formatted(repo.displayPrefix());
-        return "%s %s".formatted(head, subject);
+        return "%s%s %s".formatted(conflicted ? CONFLICT_MARKER : "", head, subject);
     }
 
     /**

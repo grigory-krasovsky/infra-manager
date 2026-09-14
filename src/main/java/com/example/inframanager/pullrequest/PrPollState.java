@@ -52,6 +52,17 @@ public class PrPollState {
     @Column(name = "task_digest", length = 64)
     private String taskDigest;
 
+    /**
+     * Мешают ли конфликты влить пул-реквест. Отдельной колонкой по той же причине, что
+     * и задачи: конфликт создаётся чужим мержем в целевую ветку, и в самом пул-реквесте
+     * при этом не меняется ничего.
+     *
+     * <p>Null — «не знаем»: закрытый, ещё не опрошенный или тот, о чьём мерже Bitbucket
+     * промолчал. От «конфликтов нет» это отличается намеренно.
+     */
+    @Column
+    private Boolean conflicted;
+
     @Column(name = "first_seen_at", nullable = false)
     private Instant firstSeenAt;
 
@@ -89,13 +100,17 @@ public class PrPollState {
         return taskDigest;
     }
 
+    public Boolean getConflicted() {
+        return conflicted;
+    }
+
     public Instant getFirstSeenAt() {
         return firstSeenAt;
     }
 
     /** Записывает только что сделанное наблюдение. Выжимка обрезается под размер колонки. */
     public void observe(String state, Integer version, String latestCommit, String reviewerDigest,
-                        String taskDigest) {
+                        String taskDigest, Boolean conflicted) {
         this.state = state;
         this.version = version;
         this.latestCommit = latestCommit;
@@ -103,6 +118,7 @@ public class PrPollState {
                 ? reviewerDigest
                 : reviewerDigest.substring(0, 64);
         this.taskDigest = taskDigest;
+        this.conflicted = conflicted;
         this.lastSeenAt = Instant.now();
     }
 }

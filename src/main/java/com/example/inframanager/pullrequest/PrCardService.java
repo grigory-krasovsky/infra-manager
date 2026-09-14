@@ -90,6 +90,10 @@ public class PrCardService implements InboundEventHandler {
         String eventKey = event.getEventType();
         boolean archive = DELETED_EVENT.equals(eventKey);
 
+        // «Не знаем» и «конфликтов нет» для заголовка одно и то же: предупреждать можно
+        // только о выясненном. Выясняет это путь с опросом — он же кладёт ответ в payload.
+        boolean conflicted = parsed.conflicted().orElse(false);
+
         String issueKey = issueKeyExtractor
                 .extract(parsed.sourceBranch(),
                         parsed.pullRequest() == null ? null : parsed.pullRequest().title())
@@ -102,7 +106,7 @@ public class PrCardService implements InboundEventHandler {
                 board.get().trelloBoardId(),
                 lifecycle.listFor(eventKey).orElse(null),
                 lifecycle.createInList(),
-                renderer.title(parsed, board.get(), issueKey, issueSummary),
+                renderer.title(parsed, board.get(), issueKey, issueSummary, conflicted),
                 renderer.description(parsed, ref),
                 issueKey,
                 labelsFor(parsed, board.get()),

@@ -6,6 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import com.example.inframanager.event.EventSource;
 import com.example.inframanager.event.InboundEventIngestService;
@@ -90,11 +91,13 @@ public class BitbucketPrPoller {
     }
 
     private int observe(LifecycleProperties.RepoBoard repo, BitbucketPrEvent.PullRequest raw) {
-        BitbucketPrEvent.PullRequest pullRequest = withRepository(raw, repo);
-        PullRequestRef ref = new PullRequestRef(repo.projectKey(), repo.repoSlug(), pullRequest.id());
+        PullRequestRef ref = new PullRequestRef(repo.projectKey(), repo.repoSlug(), raw.id());
+        PrPollState previous = stateRepository.find(ref).orElse(null);
+
+        Boolean conflicted = conflicted(ref, raw, previous);
+        BitbucketPrEvent.PullRequest pullRequest = normalize(raw, repo, conflicted);
         BitbucketPrEvent snapshot = new BitbucketPrEvent(null, null, pullRequest);
 
-        PrPollState previous = stateRepository.find(ref).orElse(null);
         // Выжимка по ревьюерам хранится хэшем: в неё входят коммиты, и в отведённые
         // колонке 64 символа она перестала помещаться, а обрезанная молча теряла бы
         // изменения в хвосте — то есть у последних по алфавиту ревьюеров.
@@ -106,7 +109,7 @@ public class BitbucketPrPoller {
         // строку сразу, а ещё не наблюдённая строка нарушила бы NOT NULL на state.
         PrPollState state = previous != null ? previous : new PrPollState(ref);
         state.observe(pullRequest.state(), pullRequest.version(),
-                snapshot.latestCommit(), reviewerDigest, taskDigest);
+                snapshot.latestCommit(), reviewerDigest, taskDigest, conflicted);
         if (previous == null) {
             stateRepository.save(state);
         }
@@ -116,7 +119,8 @@ public class BitbucketPrPoller {
         }
 
         String payload = objectMapper.writeValueAsString(new BitbucketPrEvent(eventKey, null, pullRequest));
-        String externalId = externalId(ref, eventKey, snapshot, pullRequest, reviewerDigest, taskDigest);
+        String externalId = externalId(ref, eventKey, snapshot, pullRequest, reviewerDigest, taskDigest,
+                conflicted);
         boolean ingested = ingestService.ingest(EventSource.BITBUCKET, externalId, eventKey, payload);
         if (ingested) {
             log.info("Reconstructed {} for {} from polling", eventKey, ref.asKey());
@@ -191,15 +195,66 @@ public class BitbucketPrPoller {
         if (changed(previous.getTaskDigest(), taskDigest)) {
             return "pr:modified";
         }
+
+        // Конфликт — единственное здесь, что происходит вообще без участия пул-реквеста:
+        // его создаёт и убирает чужой мерж в целевую ветку. Ни версия, ни ветка, ни
+        // ревьюеры при этом не меняются, так что заметить это можно только сравнением.
+        // Колонку он тоже не двигает: «чей ход» по-прежнему решает ревью.
+        if (changed(previous.getConflicted(), snapshot.conflicted().orElse(null))) {
+            return "pr:modified";
+        }
         return null;
     }
 
     /**
-     * Endpoint со списком может не прислать репозиторий в ref'е; карточка ключуется по
-     * нему, поэтому подставляем его из конфигурации, а не роняем обработку дальше по цепочке.
+     * Мешают ли конфликты влить этот пул-реквест.
+     *
+     * <p>Сначала смотрим в уже полученный ответ: результат пробного мержа Bitbucket кладёт
+     * прямо в список пул-реквестов. Считает он его лениво, и пока пул-реквест никто не
+     * открывал, там лежит ответ о старом коде, — вот тогда и спрашиваем отдельно, благо
+     * тот запрос заодно заставляет мерж пересчитать.
+     *
+     * <p>Не удалось узнать — остаётся прошлый ответ: выдуманное «конфликтов нет» сняло бы
+     * значок с карточки на первой же заминке Bitbucket.
+     *
+     * @return null, если ответа нет вовсе, — и у закрытого пул-реквеста, которому уже
+     *         нечем конфликтовать
      */
-    private BitbucketPrEvent.PullRequest withRepository(BitbucketPrEvent.PullRequest pullRequest,
-                                                        LifecycleProperties.RepoBoard repo) {
+    private Boolean conflicted(PullRequestRef ref, BitbucketPrEvent.PullRequest raw, PrPollState previous) {
+        if (!"OPEN".equalsIgnoreCase(raw.state())) {
+            return null;
+        }
+        return raw.conflicted()
+                .or(() -> mergeStatus(ref))
+                .orElse(previous == null ? null : previous.getConflicted());
+    }
+
+    /** @return ответ Bitbucket о конфликте либо {@code empty}, если спросить не удалось */
+    private Optional<Boolean> mergeStatus(PullRequestRef ref) {
+        try {
+            BitbucketClient.MergeStatus status =
+                    client.mergeStatus(ref.projectKey(), ref.repoSlug(), ref.prId());
+            return status == null ? Optional.empty() : Optional.ofNullable(status.conflicted());
+        } catch (Exception e) {
+            // Один пул-реквест без ответа не должен прерывать обход репозитория.
+            log.warn("Could not read merge status of {}", ref.asKey(), e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Приводит пул-реквест из списка к тому виду, в котором его увидит обработчик.
+     *
+     * <p>Endpoint со списком может не прислать репозиторий в ref'е; карточка ключуется по
+     * нему, поэтому подставляем его из конфигурации, а не роняем обработку дальше по цепочке.
+     *
+     * <p>Ответ о конфликте кладётся сюда уже разрешённым и помеченным свежим: дальше по
+     * цепочке его читают, а не выясняют заново, и повтор задачи даёт тот же ответ, что и
+     * первая попытка.
+     */
+    private BitbucketPrEvent.PullRequest normalize(BitbucketPrEvent.PullRequest pullRequest,
+                                                   LifecycleProperties.RepoBoard repo,
+                                                   Boolean conflicted) {
         BitbucketPrEvent.Repository fallback = new BitbucketPrEvent.Repository(
                 repo.repoSlug(), repo.repoSlug(), new BitbucketPrEvent.Project(repo.projectKey(), repo.projectKey()));
 
@@ -209,21 +264,36 @@ public class BitbucketPrPoller {
                 : new BitbucketPrEvent.Ref(toRef.id(), toRef.displayId(), toRef.latestCommit(),
                         toRef.repository() != null ? toRef.repository() : fallback);
 
+        BitbucketPrEvent.Properties properties = conflicted == null
+                ? null
+                : new BitbucketPrEvent.Properties(new BitbucketPrEvent.MergeResult(
+                        conflicted ? BitbucketPrEvent.MergeResult.CONFLICTED
+                                : BitbucketPrEvent.MergeResult.CLEAN,
+                        true));
+
         return new BitbucketPrEvent.PullRequest(
                 pullRequest.id(), pullRequest.title(), pullRequest.description(), pullRequest.state(),
                 pullRequest.version(), pullRequest.updatedDate(), pullRequest.closedDate(),
                 pullRequest.fromRef(), resolved,
-                pullRequest.author(), pullRequest.reviewers(), pullRequest.links());
+                pullRequest.author(), pullRequest.reviewers(), pullRequest.links(), properties);
     }
 
-    /** Идентифицирует переход состояния: повторный опрос неизменившегося пул-реквеста даёт дубликат. */
+    /**
+     * Идентифицирует переход состояния: повторный опрос неизменившегося пул-реквеста даёт
+     * дубликат.
+     *
+     * <p>Конфликт входит сюда наравне с остальным, и не для полноты: появившийся и
+     * разрешённый конфликт дают два {@code pr:modified}, у которых совпадает решительно
+     * всё остальное. Без него второй из них был бы отброшен как повтор первого, и значок
+     * с карточки уже не снялся бы.
+     */
     private String externalId(PullRequestRef ref, String eventKey, BitbucketPrEvent snapshot,
                               BitbucketPrEvent.PullRequest pullRequest, String reviewerDigest,
-                              String taskDigest) {
+                              String taskDigest, Boolean conflicted) {
         String fingerprint = String.join("|", ref.asKey(), eventKey,
                 String.valueOf(pullRequest.state()), String.valueOf(pullRequest.version()),
                 String.valueOf(snapshot.latestCommit()), String.valueOf(reviewerDigest),
-                String.valueOf(taskDigest));
+                String.valueOf(taskDigest), String.valueOf(conflicted));
         return "poll:" + sha256(fingerprint);
     }
 
@@ -260,7 +330,8 @@ public class BitbucketPrPoller {
         return snapshot.hasCurrentApproval() ? "pr:reviewer:approved" : fallback;
     }
 
-    private static boolean changed(String previous, String current) {
+    /** Неизвестное «сейчас» изменением не считается: не знать и увидеть новое — разное. */
+    private static boolean changed(Object previous, Object current) {
         return current != null && !Objects.equals(previous, current);
     }
 

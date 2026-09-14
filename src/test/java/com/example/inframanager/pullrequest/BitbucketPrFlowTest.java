@@ -312,6 +312,44 @@ class BitbucketPrFlowTest {
     }
 
     @Test
+    void aPullRequestThatCannotBeMergedIsMarkedInTheCardTitle() throws Exception {
+        deliver("pr:opened", conflictedPayload(63, "Fix", "CONFLICTED"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.CreateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
+        verify(trelloClient).createCard(anyString(), anyString(), request.capture());
+        assertThat(request.getValue().name()).isEqualTo("⚠️ BACK · Fix");
+    }
+
+    @Test
+    void theMarkGoesAwayWithTheConflict() throws Exception {
+        deliver("pr:opened", conflictedPayload(64, "Fix", "CONFLICTED"));
+        drain();
+
+        deliver("pr:modified", conflictedPayload(64, "Fix", "CLEAN"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.UpdateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
+        verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
+        assertThat(request.getValue().name()).isEqualTo("BACK · Fix");
+    }
+
+    @Test
+    void aPullRequestNobodyAskedAboutMergingCarriesNoMark() throws Exception {
+        // Так выглядит путь с вебхуками: результата пробного мержа в теле нет вовсе.
+        // «Не знаем» — не повод пугать: значок ставится только по выясненному.
+        deliver("pr:opened", payload(65, "Fix"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.CreateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
+        verify(trelloClient).createCard(anyString(), anyString(), request.capture());
+        assertThat(request.getValue().name()).isEqualTo("BACK · Fix");
+    }
+
+    @Test
     void aBranchThatStandsForTestCarriesTheTestLabel() throws Exception {
         deliver("pr:opened", payloadIntoBranch(62, "Fix", "postgres"));
         drain();
@@ -357,6 +395,25 @@ class BitbucketPrFlowTest {
 
     private String payloadIntoBranch(long prId, String title, String targetBranch) {
         return payload(prId, title, "INFRA", "backend", "feature/thing", targetBranch);
+    }
+
+    /**
+     * Тело с результатом пробного мержа — ровно в том виде, в каком его кладёт в журнал
+     * путь с опросом. Доставляется здесь вебхуком, потому что проверяется, что с этим
+     * делает обработчик, а не откуда оно взялось.
+     */
+    private String conflictedPayload(long prId, String title, String outcome) {
+        return """
+                {"eventKey":"pr:event","actor":{"name":"kras","displayName":"Grigory"},
+                 "pullRequest":{"id":%d,"title":"%s","state":"OPEN",
+                  "properties":{"mergeResult":{"outcome":"%s","current":true}},
+                  "fromRef":{"displayId":"feature/thing",
+                             "repository":{"slug":"backend","project":{"key":"INFRA"}}},
+                  "toRef":{"displayId":"main",
+                           "repository":{"slug":"backend","project":{"key":"INFRA"}}},
+                  "author":{"user":{"name":"kras","displayName":"Grigory"}},
+                  "reviewers":[{"user":{"displayName":"Reviewer One"},"approved":false}]}}
+                """.formatted(prId, title, outcome);
     }
 
     private String payload(long prId, String title, String projectKey, String repoSlug,

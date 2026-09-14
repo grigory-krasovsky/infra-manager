@@ -309,6 +309,95 @@ class BitbucketPrPollerTest {
     }
 
     @Test
+    void aConflictAppearingRefreshesTheCardWithoutMovingIt() {
+        // Конфликт возникает от чужого мержа в целевую ветку: в самом пул-реквесте не
+        // меняется ничего, поэтому сравнивать приходится именно результат мержа.
+        given(pr(50, "OPEN", 1, "commit-a", List.of(), merge("CLEAN", true)));
+        poller.runOnce();
+
+        given(pr(50, "OPEN", 1, "commit-a", List.of(), merge("CONFLICTED", true)));
+        assertThat(poller.runOnce()).isEqualTo(1);
+
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:modified");
+    }
+
+    @Test
+    void aResolvedConflictIsSeenToo() {
+        // Оба перехода дают pr:modified, и всё остальное в отпечатке у них совпадает —
+        // не входи туда сам конфликт, второе событие отбросилось бы как повтор первого,
+        // и значок с карточки уже не снялся бы.
+        given(pr(51, "OPEN", 1, "commit-a", List.of(), merge("CLEAN", true)));
+        poller.runOnce();
+        given(pr(51, "OPEN", 1, "commit-a", List.of(), merge("CONFLICTED", true)));
+        poller.runOnce();
+
+        given(pr(51, "OPEN", 1, "commit-a", List.of(), merge("CLEAN", true)));
+        assertThat(poller.runOnce()).isEqualTo(1);
+
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:modified", "pr:modified");
+    }
+
+    @Test
+    void aMergeResultComputedForOldHeadsIsCheckedWithBitbucket() {
+        // Bitbucket считает мерж лениво: пока пул-реквест никто не открывал, в списке
+        // лежит ответ о старом коде. Верить ему нельзя — надо переспросить.
+        given(pr(52, "OPEN", 1, "commit-a", List.of(), merge("CLEAN", false)));
+        when(client.mergeStatus(eq("LIZA"), eq("liza"), eq(52L)))
+                .thenReturn(new BitbucketClient.MergeStatus(true));
+
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:opened");
+        assertThat(payloads().get(0)).contains("CONFLICTED");
+    }
+
+    @Test
+    void aFreshMergeResultIsTakenFromTheListWithoutAskingAgain() {
+        given(pr(53, "OPEN", 1, "commit-a", List.of(), merge("CONFLICTED", true)));
+
+        poller.runOnce();
+
+        verify(client, never()).mergeStatus(anyString(), anyString(), anyLong());
+        assertThat(payloads().get(0)).contains("CONFLICTED");
+    }
+
+    @Test
+    void anUnreadableMergeStatusLeavesTheLastKnownAnswerAlone() {
+        // Выдуманное «конфликтов нет» сняло бы предупреждение с карточки на первой же
+        // заминке Bitbucket.
+        given(pr(54, "OPEN", 1, "commit-a", List.of(), merge("CONFLICTED", true)));
+        poller.runOnce();
+
+        given(pr(54, "OPEN", 1, "commit-a", List.of(), merge("CLEAN", false)));
+        when(client.mergeStatus(anyString(), anyString(), eq(54L)))
+                .thenThrow(new IllegalStateException("bitbucket is down"));
+
+        assertThat(poller.runOnce()).isZero();
+    }
+
+    @Test
+    void mergingIsNotAskedAboutForClosedPullRequests() {
+        given(pr(55, "MERGED", 1, "commit-a", List.of()));
+
+        poller.runOnce();
+
+        verify(client, never()).mergeStatus(anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void aMergedPullRequestStopsBeingConflicted() {
+        // Значок должен уйти вместе с самим вопросом «можно ли влить».
+        given(pr(56, "OPEN", 1, "commit-a", List.of(), merge("CONFLICTED", true)));
+        poller.runOnce();
+
+        given(pr(56, "MERGED", 2, "commit-a", List.of(), merge("CONFLICTED", true)));
+        poller.runOnce();
+
+        assertThat(eventTypes()).containsExactly("pr:opened", "pr:merged");
+        assertThat(payloads().get(1)).doesNotContain("CONFLICTED");
+    }
+
+    @Test
     void theSyntheticPayloadCarriesEnoughToIdentifyTheRepository() {
         given(pr(11, "OPEN", 1, "commit-a", List.of()));
         poller.runOnce();
@@ -344,6 +433,10 @@ class BitbucketPrPollerTest {
         return jdbc.queryForList("SELECT event_type FROM inbound_event ORDER BY id", String.class);
     }
 
+    private List<String> payloads() {
+        return jdbc.queryForList("SELECT payload::text FROM inbound_event ORDER BY id", String.class);
+    }
+
     /** Ревьюер, о чьём последнем просмотренном коммите Bitbucket умолчал. */
     private BitbucketPrEvent.Reviewer reviewer(String name, String status, boolean approved) {
         return reviewer(name, status, approved, null);
@@ -358,6 +451,13 @@ class BitbucketPrPollerTest {
     private BitbucketPrEvent.PullRequest pr(long id, String state, int version,
                                             String latestCommit,
                                             List<BitbucketPrEvent.Reviewer> reviewers) {
+        return pr(id, state, version, latestCommit, reviewers, null);
+    }
+
+    private BitbucketPrEvent.PullRequest pr(long id, String state, int version,
+                                            String latestCommit,
+                                            List<BitbucketPrEvent.Reviewer> reviewers,
+                                            BitbucketPrEvent.Properties properties) {
         BitbucketPrEvent.Repository repository = new BitbucketPrEvent.Repository(
                 "liza", "liza", new BitbucketPrEvent.Project("LIZA", "LIZA"));
         return new BitbucketPrEvent.PullRequest(
@@ -366,6 +466,12 @@ class BitbucketPrPollerTest {
                 new BitbucketPrEvent.Ref("refs/heads/main", "main", "commit-main", repository),
                 new BitbucketPrEvent.Author(new BitbucketPrEvent.User("kras", "Grigory")),
                 reviewers,
-                null);
+                null,
+                properties);
+    }
+
+    /** Результат пробного мержа в том виде, в каком его кладёт в список сам Bitbucket. */
+    private static BitbucketPrEvent.Properties merge(String outcome, Boolean current) {
+        return new BitbucketPrEvent.Properties(new BitbucketPrEvent.MergeResult(outcome, current));
     }
 }

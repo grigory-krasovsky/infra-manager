@@ -36,11 +36,34 @@ public interface BitbucketClient {
                                     @RequestParam("limit") int limit);
 
     /**
+     * Результат пробного мержа: мешают ли конфликты влить пул-реквест.
+     *
+     * <p>Он же есть и в списке пул-реквестов ({@code properties.mergeResult}), и там он
+     * бесплатен, — но Bitbucket считает мерж лениво, и пока пул-реквест никто не
+     * открывал, в списке лежит ответ о старом коде. Этот запрос отвечает о нынешнем и
+     * заодно заставляет мерж пересчитать, так что в следующем списке ответ будет свежим.
+     */
+    @GetExchange("/rest/api/1.0/projects/{projectKey}/repos/{repoSlug}/pull-requests/{prId}/merge")
+    MergeStatus mergeStatus(@PathVariable String projectKey,
+                            @PathVariable String repoSlug,
+                            @PathVariable long prId);
+
+    /**
      * Элементы имеют ту же форму, что Bitbucket кладёт в {@code pullRequest} тела
      * вебхука, — именно это позволяет поллеру отдавать их тому же обработчику.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record PullRequestPage(List<BitbucketPrEvent.PullRequest> values) {
+    }
+
+    /**
+     * Берём только {@code conflicted}. Рядом приходят {@code canMerge} и {@code vetoes} —
+     * запреты merge check'ов: недобор аппрувов, незакрытые задачи, выставленный
+     * {@code NEEDS_WORK}. Всё это доска уже показывает колонкой и чек-листом, и
+     * повторять то же самое значком в заголовке значило бы сказать одно дважды.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record MergeStatus(Boolean conflicted) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

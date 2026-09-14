@@ -27,7 +27,48 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
                               Long updatedDate,
                               /** Миллисекунды эпохи; появляется вместе с закрытием и потом не меняется. */
                               Long closedDate,
-                              Ref fromRef, Ref toRef, Author author, List<Reviewer> reviewers, Links links) {
+                              Ref fromRef, Ref toRef, Author author, List<Reviewer> reviewers, Links links,
+                              /** Приходит только в ответе REST; в теле вебхука этого нет. */
+                              Properties properties) {
+
+        public Optional<Boolean> conflicted() {
+            return properties == null || properties.mergeResult() == null
+                    ? Optional.empty()
+                    : properties.mergeResult().conflicted();
+        }
+    }
+
+    /**
+     * Довески к пул-реквесту, которые Bitbucket считает не его полями: результат пробного
+     * мержа и счётчики задач. Нужен отсюда только мерж — задачи мы читаем отдельным
+     * запросом, потому что нам нужны их тексты, а не количество.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Properties(MergeResult mergeResult) {
+    }
+
+    /**
+     * Чем кончилась попытка слить ветки.
+     *
+     * @param outcome {@code CLEAN}, {@code CONFLICTED} или {@code BASE}
+     * @param current посчитан ли результат для нынешних голов веток. Bitbucket считает
+     *        мерж лениво: пока пул-реквест никто не открывал, здесь лежит ответ о старом
+     *        коде, и принимать его за нынешний нельзя. Отсутствие поля считаем свежестью —
+     *        так же, как отсутствие коммита у вердикта ревьюера.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record MergeResult(String outcome, Boolean current) {
+
+        public static final String CLEAN = "CLEAN";
+        public static final String CONFLICTED = "CONFLICTED";
+
+        /** @return есть ли конфликт, либо {@code empty}, если ответа нет или он устарел */
+        public Optional<Boolean> conflicted() {
+            if (outcome == null || Boolean.FALSE.equals(current)) {
+                return Optional.empty();
+            }
+            return Optional.of(CONFLICTED.equalsIgnoreCase(outcome));
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -109,6 +150,17 @@ public record BitbucketPrEvent(String eventKey, Actor actor, PullRequest pullReq
 
     public String state() {
         return pullRequest == null ? null : pullRequest.state();
+    }
+
+    /**
+     * Мешают ли конфликты влить этот пул-реквест.
+     *
+     * <p>Пусто — «не знаем»: в теле вебхука такого поля нет вовсе, а в ответе REST оно
+     * бывает посчитано для старых голов веток. Разрешает это путь с опросом и кладёт
+     * готовый ответ в payload; карточка его только читает.
+     */
+    public Optional<Boolean> conflicted() {
+        return pullRequest == null ? Optional.empty() : pullRequest.conflicted();
     }
 
     /** Влит или отклонён — то есть больше ничем не станет. */
