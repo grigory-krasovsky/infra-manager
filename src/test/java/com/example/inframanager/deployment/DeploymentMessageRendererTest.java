@@ -77,11 +77,15 @@ class DeploymentMessageRendererTest {
         String withPullRequest = renderer.render(
                 event("SUCCESS", "Лиза API", "prod", "release-617", null, null, null),
                 pullRequests(new DeploymentPullRequest(172, "init claude code", null)));
+        String withCommits = renderer.render(
+                event("SUCCESS", "Лиза API", "prod", "release-617", null, null, null),
+                commits("Поднял версию зависимости"));
         String without = renderer.render(event("SUCCESS", "Лиза API", "prod", "release-617", null, null, null),
                 DeploymentSubject.empty());
 
         assertThat(withIssue).doesNotContain("release-617");
         assertThat(withPullRequest).doesNotContain("release-617");
+        assertThat(withCommits).doesNotContain("release-617");
         assertThat(without).contains("Версия: release-617");
     }
 
@@ -131,6 +135,78 @@ class DeploymentMessageRendererTest {
                 pullRequests(new DeploymentPullRequest(107, title, null)));
 
         assertThat(text).contains("…").doesNotContain("не уместим");
+    }
+
+    @Test
+    void commitsGoIntoAnExpandableQuote() {
+        // Раскрывающаяся цитата — единственное, чем Telegram умеет прятать длинный кусок
+        // сообщения: свёрнутой видно начало, остальное под «Показать полностью».
+        String text = renderer.render(event("SUCCESS", "Лиза", "prod", null, null, null, null),
+                commits("Правка валидации формы", "LIZA-599 добавил поле", "Поднял версию"));
+
+        assertThat(text).contains("\nКоммиты (3):\n<blockquote expandable>"
+                + "• Правка валидации формы"
+                + "\n• LIZA-599 добавил поле"
+                + "\n• Поднял версию</blockquote>");
+    }
+
+    @Test
+    void commitMessagesAreEscapedLikeEverythingElseFromBamboo() {
+        String text = renderer.render(event("SUCCESS", "Лиза", "prod", null, null, null, null),
+                commits("Убрал <div> из шаблона & поправил отступ"));
+
+        assertThat(text).contains("• Убрал &lt;div&gt; из шаблона &amp; поправил отступ")
+                .doesNotContain("<div>");
+    }
+
+    @Test
+    void aLongCommitLineIsCutLikeASummary() {
+        String commit = "Переписал разбор ответа Bamboo, потому что при пустом разделе changes он падал "
+                + "с NPE ещё до того, как дело доходило до задач, и вот ещё немного слов сверх меры";
+        String text = renderer.render(event("SUCCESS", "Лиза", "prod", null, null, null, null),
+                commits(commit));
+
+        assertThat(text).contains("…").doesNotContain("сверх меры");
+    }
+
+    @Test
+    void commitsBeyondTheCapAreCountedRatherThanShown() {
+        String[] many = new String[60];
+        for (int i = 0; i < many.length; i++) {
+            many[i] = "Коммит " + i;
+        }
+
+        String text = renderer.render(event("SUCCESS", "Лиза", "prod", null, null, null, null), commits(many));
+
+        assertThat(text).contains("Коммиты (60):")
+                .contains("• Коммит 0")
+                .contains("• Коммит 49")
+                .doesNotContain("• Коммит 50")
+                .contains("…и ещё 10</blockquote>");
+    }
+
+    @Test
+    void theMessageNeverOutgrowsWhatTelegramAccepts() {
+        // 400 от Telegram означает не обрезанное сообщение, а не дошедшее вовсе.
+        String[] many = new String[50];
+        for (int i = 0; i < many.length; i++) {
+            many[i] = ("Коммит номер " + i + " с длинным заголовком, ").repeat(10);
+        }
+
+        String text = renderer.render(event("SUCCESS", "Лиза", "prod", null, null, null,
+                "Child of LIZA-APPP-437"), commits(many));
+
+        assertThat(text.length()).isLessThanOrEqualTo(4096);
+        assertThat(text).contains("…и ещё ").endsWith("</blockquote>");
+    }
+
+    @Test
+    void withoutCommitsThereIsNoQuoteAtAll() {
+        // Пустую цитату Telegram не примет, да и показывать в ней нечего.
+        String text = renderer.render(event("SUCCESS", "Лиза", "prod", "release-1", null, null, null),
+                DeploymentSubject.empty());
+
+        assertThat(text).doesNotContain("blockquote").doesNotContain("Коммиты");
     }
 
     @Test
@@ -191,11 +267,15 @@ class DeploymentMessageRendererTest {
     }
 
     private static DeploymentSubject issues(DeploymentIssue... issues) {
-        return new DeploymentSubject(List.of(issues), List.of());
+        return new DeploymentSubject(List.of(issues), List.of(), List.of());
     }
 
     private static DeploymentSubject pullRequests(DeploymentPullRequest... pullRequests) {
-        return new DeploymentSubject(List.of(), List.of(pullRequests));
+        return new DeploymentSubject(List.of(), List.of(pullRequests), List.of());
+    }
+
+    private static DeploymentSubject commits(String... commits) {
+        return new DeploymentSubject(List.of(), List.of(), List.of(commits));
     }
 
     private static TelegramProperties properties(String zone) {

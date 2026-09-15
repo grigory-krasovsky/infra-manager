@@ -169,6 +169,49 @@ class DeploymentSubjectEnricherTest {
     }
 
     @Test
+    void commitsAreCollectedNewestFirst() {
+        // Bamboo отдаёт их по возрастанию времени, а в свёрнутой цитате Telegram
+        // показывает начало — наверху должно оказаться самое свежее.
+        givenChanges("LIZA-APPP-437", "Самый старый", "Средний", "Самый свежий");
+
+        assertThat(enricher().subjectFor(event("Child of LIZA-APPP-437")).commits())
+                .containsExactly("Самый свежий", "Средний", "Самый старый");
+    }
+
+    @Test
+    void onlyTheFirstLineOfACommitMessageSurvives() {
+        // У merge-коммита тело — половина экрана, и по существу в нём ничего нет.
+        givenChanges("LIZA-APPP-437", MERGE_COMMIT);
+
+        assertThat(enricher().subjectFor(event("Child of LIZA-APPP-437")).commits())
+                .containsExactly("Pull request #107: 2026 07 31 init claude code");
+    }
+
+    @Test
+    void aLeadingBlankLineDoesNotBecomeAnEmptyCommit() {
+        givenChanges("LIZA-APPP-437", "\n\n  Поднял версию зависимости\n\nподробности", "   ", "");
+
+        assertThat(enricher().subjectFor(event("Child of LIZA-APPP-437")).commits())
+                .containsExactly("Поднял версию зависимости");
+    }
+
+    @Test
+    void commitsAreCollectedEvenWhenTheIssueIsKnown() {
+        // Задача говорит, ради чего был деплой, коммиты — что в нём изменилось;
+        // одно другому не мешает, в отличие от пул-реквеста.
+        when(client.buildResult(eq("LIZA-APIP-636"), any())).thenReturn(new BambooClient.BuildResult(
+                new BambooClient.BuildResult.JiraIssues(
+                        List.of(new BambooClient.BuildResult.Issue("LIZA-599", "Реализация"))),
+                new BambooClient.BuildResult.Changes(
+                        List.of(new BambooClient.BuildResult.Change("LIZA-599 добавил поле")))));
+
+        DeploymentSubject subject = enricher().subjectFor(event("Child of LIZA-APIP-636"));
+
+        assertThat(subject.issues()).hasSize(1);
+        assertThat(subject.commits()).containsExactly("LIZA-599 добавил поле");
+    }
+
+    @Test
     void buildKeysAreRecognisedInBothShapesBambooUses() {
         assertThat(DeploymentSubjectEnricher.buildKey("Child of LIZA-APIP-636")).contains("LIZA-APIP-636");
         assertThat(DeploymentSubjectEnricher.buildKey("Child of ORVD-DEV-1169")).contains("ORVD-DEV-1169");

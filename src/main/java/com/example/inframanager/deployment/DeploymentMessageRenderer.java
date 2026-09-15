@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -30,6 +31,18 @@ public class DeploymentMessageRenderer {
 
     /** Длинное summary задачи превращает уведомление в простыню. */
     private static final int MAX_SUMMARY = 90;
+
+    /** Заголовок коммита бывает и на абзац; в списке из него читают начало. */
+    private static final int MAX_COMMIT_LINE = 120;
+
+    /** Дальше цитату уже не листают, а место она занимает. */
+    private static final int MAX_COMMITS = 50;
+
+    /** Предел {@code sendMessage}: 4096 символов на сообщение. */
+    private static final int MESSAGE_LIMIT = 4096;
+
+    /** Место под «…и ещё N» с запасом на любое N. */
+    private static final int TAIL_BUDGET = 24;
 
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
@@ -78,6 +91,8 @@ public class DeploymentMessageRenderer {
         if (StringUtils.hasText(event.triggerSentence())) {
             text.append("\nЗапуск: ").append(renderTrigger(event.triggerSentence()));
         }
+        // Последним: цитата длинная, и всё, что после неё, читатель бы искал под ней.
+        appendCommits(text, named.commits());
         return text.toString();
     }
 
@@ -87,7 +102,7 @@ public class DeploymentMessageRenderer {
                 ? "<a href=\"%s\">%s</a>".formatted(escape(issue.url()), key)
                 : key;
         return StringUtils.hasText(issue.summary())
-                ? link + " · " + escape(truncate(issue.summary()))
+                ? link + " · " + escape(truncate(issue.summary(), MAX_SUMMARY))
                 : link;
     }
 
@@ -97,8 +112,49 @@ public class DeploymentMessageRenderer {
                 ? "<a href=\"%s\">%s</a>".formatted(escape(pullRequest.url()), number)
                 : number;
         return StringUtils.hasText(pullRequest.title())
-                ? link + " · " + escape(truncate(pullRequest.title()))
+                ? link + " · " + escape(truncate(pullRequest.title(), MAX_SUMMARY))
                 : link;
+    }
+
+    /**
+     * Дописывает коммиты раскрывающейся цитатой — {@code <blockquote expandable>} из
+     * Bot API 7.4. Свёрнутой у неё видно несколько первых строк, остальное Telegram
+     * прячет под «Показать полностью»: коммитов в деплое бывает и полсотни, и ленту
+     * они бы собой заняли целиком.
+     *
+     * <p>Больше {@value #MESSAGE_LIMIT} символов Telegram не принимает — отвечает 400, и
+     * уведомление не доходит вовсе, — поэтому лишние коммиты не показываем, а считаем.
+     * Меряем длину вместе с разметкой, хотя Telegram считает только текст (теги не в
+     * счёт, «&amp;amp;» — один символ): ошибка тогда всегда в запас.
+     */
+    private static void appendCommits(StringBuilder text, List<String> commits) {
+        if (commits.isEmpty()) {
+            return;
+        }
+        String header = "\nКоммиты (%d):\n<blockquote expandable>".formatted(commits.size());
+        int budget = MESSAGE_LIMIT - text.length() - header.length() - "</blockquote>".length() - TAIL_BUDGET;
+
+        StringBuilder quote = new StringBuilder();
+        int shown = 0;
+        for (String commit : commits) {
+            if (shown == MAX_COMMITS) {
+                break;
+            }
+            String line = (shown == 0 ? "• " : "\n• ") + escape(truncate(commit, MAX_COMMIT_LINE));
+            if (quote.length() + line.length() > budget) {
+                break;
+            }
+            quote.append(line);
+            shown++;
+        }
+        if (shown == 0) {
+            // Места не осталось даже на один коммит; пустую цитату Telegram не примет.
+            return;
+        }
+        if (shown < commits.size()) {
+            quote.append("\n…и ещё ").append(commits.size() - shown);
+        }
+        text.append(header).append(quote).append("</blockquote>");
     }
 
     /**
@@ -115,9 +171,10 @@ public class DeploymentMessageRenderer {
         return duration == null ? at : at + ", за " + formatDuration(duration);
     }
 
-    static String truncate(String summary) {
-        String trimmed = summary.trim();
-        return trimmed.length() <= MAX_SUMMARY ? trimmed : trimmed.substring(0, MAX_SUMMARY - 1).trim() + "…";
+    /** Режем до экранирования: в экранированном тексте обрез пришёлся бы внутрь «&amp;amp;». */
+    static String truncate(String value, int max) {
+        String trimmed = value.trim();
+        return trimmed.length() <= max ? trimmed : trimmed.substring(0, max - 1).trim() + "…";
     }
 
     /**

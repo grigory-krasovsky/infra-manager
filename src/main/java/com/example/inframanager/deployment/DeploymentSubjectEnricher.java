@@ -1,6 +1,7 @@
 package com.example.inframanager.deployment;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -22,6 +23,9 @@ import org.springframework.util.StringUtils;
  * сборку («Child of LIZA-APIP-636»), а сборка помнит и связанные задачи — Bamboo сам
  * достаёт их из сообщений коммитов, — и сами коммиты. Получается два шага: из причины —
  * ключ сборки, по сборке — задача, а если задачи нет, то пул-реквест из merge-коммита.
+ *
+ * <p>Сами коммиты берём всегда: в отличие от задачи и пул-реквеста они не называют
+ * деплой, а перечисляют его содержимое, и одно другому не мешает.
  *
  * <p>Это украшение, и уронить из-за него уведомление было бы неразумно: недоступный
  * Bamboo означает сообщение без строки про задачу, а не потерянное сообщение.
@@ -86,7 +90,10 @@ public class DeploymentSubjectEnricher {
             List<DeploymentIssue> issues = issues(result);
             // Пул-реквесты ищем, только когда задач нет: в сообщении они всё равно уступят
             // задаче место, а разбирать коммиты впустую незачем.
-            return new DeploymentSubject(issues, issues.isEmpty() ? pullRequests(result) : List.of());
+            return new DeploymentSubject(
+                    issues,
+                    issues.isEmpty() ? pullRequests(result) : List.of(),
+                    commits(result));
         } catch (Exception e) {
             log.warn("Could not read Bamboo build {}", buildKey.get(), e);
             return DeploymentSubject.empty();
@@ -115,6 +122,39 @@ public class DeploymentSubjectEnricher {
         return found.size() <= MAX_PULL_REQUESTS
                 ? found
                 : found.subList(found.size() - MAX_PULL_REQUESTS, found.size());
+    }
+
+    /**
+     * Заголовки коммитов сборки — по одной строке на коммит.
+     *
+     * <p>От сообщения берём только первую строку: тело у merge-коммита занимает пол-экрана
+     * («Merge in LIZA/liza from …», список влитых коммитов), а сказать по существу ему
+     * нечего. Порядок разворачиваем: Bamboo отдаёт коммиты по возрастанию времени, а
+     * Telegram в свёрнутой цитате показывает начало — значит наверху должны быть свежие.
+     */
+    private List<String> commits(BambooClient.BuildResult result) {
+        List<String> subjects = new ArrayList<>();
+        for (BambooClient.BuildResult.Change change : result.changeList()) {
+            if (change != null) {
+                firstLine(change.comment()).ifPresent(subjects::add);
+            }
+        }
+        Collections.reverse(subjects);
+        return subjects;
+    }
+
+    /** @return первая непустая строка сообщения; пусто, если сообщения нет вовсе */
+    private static Optional<String> firstLine(String comment) {
+        if (!StringUtils.hasText(comment)) {
+            return Optional.empty();
+        }
+        for (String line : comment.split("\\R")) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                return Optional.of(trimmed);
+            }
+        }
+        return Optional.empty();
     }
 
     /**
