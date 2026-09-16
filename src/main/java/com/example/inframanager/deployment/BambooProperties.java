@@ -67,7 +67,9 @@ public record BambooProperties(
             /** Насколько глубоко смотрит каждый проход; что-то дают только не виденные раньше результаты. */
             @DefaultValue("10") int maxResults,
 
-            @DefaultValue List<Environment> environments) {
+            @DefaultValue List<Environment> environments,
+
+            @DefaultValue List<BuildPlan> buildPlans) {
 
         /**
          * Id окружений приходится перечислять явно. Вытаскивать их с дашборда деплоев —
@@ -75,6 +77,17 @@ public record BambooProperties(
          * нужны для сообщения.
          */
         public record Environment(long id, String projectName, String environmentName) {
+        }
+
+        /**
+         * Билд-план, о провале которого стоит сообщить. Нужен там, где падение случается
+         * раньше деплоя и потому в {@link Environment} не попадает: сборка, не дошедшая
+         * до релиза, не порождает ни одного результата деплоя, а значит опрос окружений
+         * её не увидит вовсе.
+         *
+         * @param key ключ плана вида {@code LIZA-REST}, а не номер конкретной сборки
+         */
+        public record BuildPlan(String key, String projectName, String environmentName) {
         }
     }
 }

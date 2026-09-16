@@ -210,6 +210,29 @@ class DeploymentMessageRendererTest {
     }
 
     @Test
+    void aFailedBuildIsNamedWithALinkToTheResult() {
+        String text = renderer.renderBuildFailure(new BambooBuildEvent(
+                "LIZA-REST-3081", "Failed", "Лиза API", "dev",
+                "1757498400000", "1757498472000",
+                "Changes by <a href=\"https://bamboo.local/u\">Красовский Григорий</a>",
+                "https://bamboo.local/browse/LIZA-REST-3081"));
+
+        assertThat(text)
+                .startsWith("❌ <b>Лиза API</b> — сборка для <b>dev</b> не прошла")
+                .contains("за 1 мин 12 с")
+                .contains("Сборка: <a href=\"https://bamboo.local/browse/LIZA-REST-3081\">LIZA-REST-3081</a>")
+                .contains("Запуск: Changes by <a href=\"https://bamboo.local/u\">Красовский Григорий</a>");
+    }
+
+    @Test
+    void aFailedBuildWithoutAResultUrlKeepsItsKeyAsPlainText() {
+        String text = renderer.renderBuildFailure(new BambooBuildEvent(
+                "LIZA-REST-3081", "Failed", "Лиза API", "dev", null, null, null, null));
+
+        assertThat(text).contains("Сборка: LIZA-REST-3081").doesNotContain("<a href");
+    }
+
+    @Test
     void missingTimestampsJustOmitTheDuration() {
         String text = renderer.render(event("SUCCESS", "INFRA", "DEV", "v1", "1757498400000", null, null),
                 DeploymentSubject.empty());

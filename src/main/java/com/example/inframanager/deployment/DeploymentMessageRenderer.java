@@ -96,6 +96,34 @@ public class DeploymentMessageRenderer {
         return text.toString();
     }
 
+    /**
+     * Сборка, упавшая раньше релиза: деплой в этом случае не запускался вовсе, и объявить
+     * о провале, кроме как по самой сборке, больше не от кого.
+     */
+    public String renderBuildFailure(BambooBuildEvent event) {
+        String project = escape(event.projectNameOrUnknown());
+        String environment = escape(event.environmentNameOrUnknown());
+
+        StringBuilder text = new StringBuilder()
+                .append("❌ <b>").append(project).append("</b> — сборка для <b>").append(environment)
+                .append("</b> не прошла");
+
+        String when = renderWhen(event.finishedInstant(), event.duration());
+        if (when != null) {
+            text.append("\nКогда: ").append(when);
+        }
+        if (StringUtils.hasText(event.resultUrl())) {
+            text.append("\nСборка: <a href=\"").append(escape(event.resultUrl())).append("\">")
+                    .append(escape(event.buildResultKey())).append("</a>");
+        } else {
+            text.append("\nСборка: ").append(escape(event.buildResultKey()));
+        }
+        if (StringUtils.hasText(event.buildReason())) {
+            text.append("\nЗапуск: ").append(renderTrigger(event.buildReason()));
+        }
+        return text.toString();
+    }
+
     private String renderIssue(DeploymentIssue issue) {
         String key = escape(issue.key());
         String link = StringUtils.hasText(issue.url())
@@ -162,8 +190,10 @@ public class DeploymentMessageRenderer {
      * всё в UTC, а читают сообщение люди, живущие в одном поясе.
      */
     private String renderWhen(BambooDeploymentEvent event) {
-        Instant finished = event.finishedInstant();
-        Duration duration = event.duration();
+        return renderWhen(event.finishedInstant(), event.duration());
+    }
+
+    private String renderWhen(Instant finished, Duration duration) {
         if (finished == null) {
             return duration == null ? null : "за " + formatDuration(duration);
         }

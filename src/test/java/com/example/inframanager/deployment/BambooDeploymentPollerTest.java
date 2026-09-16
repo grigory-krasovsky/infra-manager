@@ -122,6 +122,6 @@ class BambooDeploymentPollerTest {
                 BambooProperties.Source.POLL, BASE, "token", "", null, null, null, Map.of(),
                 new BambooProperties.Poll(null, 5, List.of(
                         new BambooProperties.Poll.Environment(10, "INFRA", "STAGE"),
-                        new BambooProperties.Poll.Environment(20, "INFRA", "PROD"))));
+                        new BambooProperties.Poll.Environment(20, "INFRA", "PROD")), List.of()));
     }
 }

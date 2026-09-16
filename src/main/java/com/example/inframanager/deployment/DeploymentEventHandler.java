@@ -12,8 +12,11 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Превращает сохранённую доставку от Bamboo в запись о деплое, а когда деплой
- * действительно завершился — в объявление в Telegram.
+ * Единственный обработчик источника BAMBOO — превращает сохранённую доставку в объявление
+ * в Telegram. Событий этого источника два вида, различаемых по {@code event_type}:
+ * {@code deployment} — результат деплоя, {@code build} — сборка, упавшая раньше деплоя
+ * (см. {@link BambooBuildPoller}, там же о том, почему это отдельный путь, а не то же
+ * самое событие).
  *
  * <p>Работает внутри транзакции входящего воркера, поэтому запись о деплое, отметка
  * «объявлено» и постановка сообщения в очередь происходят либо все, либо ни одна.
@@ -51,6 +54,32 @@ public class DeploymentEventHandler implements InboundEventHandler {
 
     @Override
     public void handle(InboundEvent event) {
+        if ("build".equals(event.getEventType())) {
+            handleBuildFailure(event);
+            return;
+        }
+        handleDeployment(event);
+    }
+
+    private void handleBuildFailure(InboundEvent event) {
+        BambooBuildEvent parsed = objectMapper.readValue(event.getPayload(), BambooBuildEvent.class);
+        if (isTooOldToAnnounce(parsed.finishedInstant())) {
+            // Тот же случай, что и у деплоя: первый опрос плана видит все провалы в
+            // глубине maxResults, а не только тот, что случился только что.
+            log.info("Failed build {} of {} for {} finished at {}; too old to announce",
+                    parsed.buildResultKey(), parsed.projectNameOrUnknown(),
+                    parsed.environmentNameOrUnknown(), parsed.finishedInstant());
+            return;
+        }
+        notifier.notify(
+                parsed.environmentNameOrUnknown(),
+                "build:" + parsed.buildResultKey(),
+                renderer.renderBuildFailure(parsed));
+        log.info("Announced failed build {} of {} for {}",
+                parsed.buildResultKey(), parsed.projectNameOrUnknown(), parsed.environmentNameOrUnknown());
+    }
+
+    private void handleDeployment(InboundEvent event) {
         BambooDeploymentEvent parsed = resolveProjectName(
                 objectMapper.readValue(event.getPayload(), BambooDeploymentEvent.class));
         if (parsed.deploymentResultId() == null) {
@@ -101,7 +130,10 @@ public class DeploymentEventHandler implements InboundEventHandler {
      * похуже.
      */
     private boolean isTooOldToAnnounce(BambooDeploymentEvent event) {
-        Instant finished = event.finishedInstant();
+        return isTooOldToAnnounce(event.finishedInstant());
+    }
+
+    private boolean isTooOldToAnnounce(Instant finished) {
         return finished != null
                 && finished.isBefore(Instant.now().minus(properties.maxNotificationAge()));
     }

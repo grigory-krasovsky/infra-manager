@@ -34,11 +34,14 @@ public class BambooPollConfig implements SchedulingConfigurer {
     private final BambooProperties properties;
     private final WorkerProperties workerProperties;
     private final ObjectProvider<BambooDeploymentPoller> poller;
+    private final ObjectProvider<BambooBuildPoller> buildPoller;
 
     public BambooPollConfig(BambooProperties properties,
                             WorkerProperties workerProperties,
-                            ObjectProvider<BambooDeploymentPoller> poller) {
+                            ObjectProvider<BambooDeploymentPoller> poller,
+                            ObjectProvider<BambooBuildPoller> buildPoller) {
         this.poller = poller;
+        this.buildPoller = buildPoller;
         if (!StringUtils.hasText(properties.baseUrl()) || !StringUtils.hasText(properties.token())) {
             throw new IllegalStateException(
                     "infra-manager.bamboo.source=poll requires BAMBOO_BASE_URL and BAMBOO_TOKEN");
@@ -80,16 +83,31 @@ public class BambooPollConfig implements SchedulingConfigurer {
         return new BambooDeploymentPoller(client, properties, ingestService, objectMapper);
     }
 
+    @Bean
+    BambooBuildPoller bambooBuildPoller(BambooClient client,
+                                        InboundEventIngestService ingestService,
+                                        ObjectMapper objectMapper) {
+        return new BambooBuildPoller(client, properties, ingestService, objectMapper);
+    }
+
     @Override
     public void configureTasks(ScheduledTaskRegistrar registrar) {
         if (!workerProperties.schedulingEnabled()) {
             return;
         }
-        // Достаётся через provider, а не внедряется: поллер — это @Bean этого же класса,
-        // так что зависимость от него в конструкторе была бы циклической.
+        // Достаются через provider, а не внедряются: поллеры — это @Bean этого же класса,
+        // так что зависимость от них в конструкторе была бы циклической.
         registrar.addFixedDelayTask(
                 () -> poller.getObject().runOnce(), properties.poll().interval());
         log.info("Bamboo polling scheduled every {} for {} environment(s)",
                 properties.poll().interval(), properties.poll().environments().size());
+
+        if (properties.poll().buildPlans().isEmpty()) {
+            return;
+        }
+        registrar.addFixedDelayTask(
+                () -> buildPoller.getObject().runOnce(), properties.poll().interval());
+        log.info("Bamboo build-failure polling scheduled every {} for {} plan(s)",
+                properties.poll().interval(), properties.poll().buildPlans().size());
     }
 }

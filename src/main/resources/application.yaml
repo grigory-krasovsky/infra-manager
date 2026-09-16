@@ -113,6 +113,46 @@ infra-manager:
         #    project-name: ОрВД
         #    environment-name: java17
 
+      # Plans whose failure has nowhere else to be seen: a build that never reaches a
+      # release produces no deployment result, so the environments above stay silent
+      # about it. One entry per plan behind the environments listed above, plus the
+      # ОрВД test/prod plans, which deploy straight from the plan and have no
+      # deployment project at all -- see docs/runbook.md.
+      build-plans:
+        - key: LIZA-APIP
+          project-name: Лиза API
+          environment-name: prod
+        - key: LIZA-APIT
+          project-name: Лиза API
+          environment-name: test
+        - key: LIZA-LAED
+          project-name: Лиза API
+          environment-name: elbrus-dev
+        - key: LIZA-REST
+          project-name: Лиза API
+          environment-name: dev
+        - key: LIZA-APPP
+          project-name: Лиза
+          environment-name: prod
+        - key: LIZA-APPT
+          project-name: Лиза
+          environment-name: test
+        - key: LIZA-DEV
+          project-name: Лиза
+          environment-name: dev
+        - key: LIZA-AED
+          project-name: Лиза
+          environment-name: elbrus-dev
+        - key: ORVD-DEV
+          project-name: ОрВД
+          environment-name: dev
+        - key: ORVD-ORVDT
+          project-name: ОрВД
+          environment-name: test
+        - key: ORVD-ORVDP
+          project-name: ОрВД
+          environment-name: prod
+
   telegram:
     # Off until a bot token exists. While off, notifications are still queued and
     # then marked SKIPPED, so the gap is visible in outbound_task.
