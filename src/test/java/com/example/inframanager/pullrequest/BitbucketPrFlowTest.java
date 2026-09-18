@@ -181,7 +181,10 @@ class BitbucketPrFlowTest {
                 ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
         verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
         assertThat(request.getValue().idList()).isEqualTo("list-merged");
-        assertThat(request.getValue().closed()).isFalse();
+        // Про архив не сказано ничего. Сказать «не в архиве» — это приказ достать
+        // карточку оттуда, и обычное событие вернуло бы на доску всё, что с неё
+        // убрали руками.
+        assertThat(request.getValue().closed()).isNull();
         // Переезд переставляет дату начала: по ней на доске видно, когда PR влили.
         assertThat(request.getValue().start()).matches(ISO_SECONDS);
         // Срок при этом снимается, а не ставится: срок в прошлом Trello красит красным,

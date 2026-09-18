@@ -80,6 +80,29 @@ class TrelloCardRepaintTest {
         assertThat(request.getValue().name()).isNull();
         assertThat(request.getValue().desc()).isNull();
         assertThat(request.getValue().idLabels()).isNull();
+        // Про архив — молчание. Однажды перерисовка сказала «не в архиве» всем сразу и
+        // вернула на доску 47 карточек, которые с неё убрали руками.
+        assertThat(request.getValue().closed()).isNull();
+    }
+
+    @Test
+    void aCardWithNoKnownMomentIsStampedWithNow() {
+        // Карточка попала в колонку до того, как мы начали запоминать момент.
+        // Пустая дата не сообщает ничего, поэтому ей достаётся нынешняя.
+        givenLink(4, "card-4", null);
+        Instant before = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        repaint.run(new DefaultApplicationArguments());
+        outboundWorker.runOnce();
+
+        ArgumentCaptor<TrelloClient.UpdateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
+        verify(trelloClient).updateCard(eq("card-4"), anyString(), anyString(), request.capture());
+        assertThat(Instant.parse(request.getValue().start())).isAfterOrEqualTo(before);
+
+        // И запоминается у себя, иначе следующая перерисовка выдумала бы новую дату.
+        assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 4))
+                .hasValueSatisfying(link -> assertThat(link.getListEnteredAt()).isNotNull());
     }
 
     @Test
@@ -113,7 +136,9 @@ class TrelloCardRepaintTest {
             if (cardId != null) {
                 link.recordCard(cardId, "list-review", false);
             }
-            link.enteredList(enteredList);
+            if (enteredList != null) {
+                link.enteredList(enteredList);
+            }
             links.save(link);
         });
     }

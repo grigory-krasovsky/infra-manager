@@ -118,7 +118,9 @@ public class PrCardService implements InboundEventHandler {
                 coverFor(board.get()),
                 authorCandidates(parsed),
                 checklistFor(ref),
-                false,
+                // Не false, а null: «не в архиве» — это приказ достать оттуда, и он
+                // вернул бы на доску всё, что с неё убрали руками.
+                null,
                 listEnteredAt(closedAt, event),
                 closedAt,
                 // Отметку о выполнении ставит суточный проход по возрасту пул-реквеста,
@@ -151,7 +153,7 @@ public class PrCardService implements InboundEventHandler {
                 // Карточку, которой ещё нет, такая команда не создаёт — отправитель
                 // отказывается заводить безымянную.
                 null, null, null, null, null, null, null, null, null,
-                true,
+                Boolean.TRUE,
                 // Архивация — не переезд в колонку: срок карточки остаётся тем, каким
                 // был, и в архиве видно, на чём она остановилась.
                 null,

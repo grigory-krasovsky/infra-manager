@@ -92,13 +92,13 @@ public class TrelloSender implements OutboundTaskSender {
     }
 
     private void createCard(TrelloCardCommand command, PrCardLink link) {
-        if (command.archive() || command.title() == null) {
+        if (archives(command) || command.title() == null) {
             // Создавать нечего: либо PR удалили раньше, чем мы успели его отзеркалить,
             // либо это правка существующей карточки — перемещение сверкой, отметка о
             // выполнении, — а карточки к моменту отправки уже нет. Завести вместо неё
             // безымянную хуже, чем не делать ничего.
             log.debug("Skipping {} for {} -- no card was ever created",
-                    command.archive() ? "archive" : "update", command.pullRequest().asKey());
+                    archives(command) ? "archive" : "update", command.pullRequest().asKey());
             return;
         }
 
@@ -216,7 +216,7 @@ public class TrelloSender implements OutboundTaskSender {
 
         link.recordCard(link.getTrelloCardId(),
                 listId != null ? listId : link.getCurrentListId(),
-                command.archive());
+                archives(command) || link.isArchived());
         if (complete) {
             link.markCompleted();
         }
@@ -225,6 +225,11 @@ public class TrelloSender implements OutboundTaskSender {
                 command.moveToListName() == null ? "" : " -> list '" + command.moveToListName() + "'",
                 complete ? " (complete)"
                         : entersList ? " (start " + isoSeconds(link.getListEnteredAt()) + ")" : "");
+    }
+
+    /** Просит ли команда убрать карточку в архив. Null значит «не трогать», а не «достать». */
+    private static boolean archives(TrelloCardCommand command) {
+        return Boolean.TRUE.equals(command.archive());
     }
 
     /**

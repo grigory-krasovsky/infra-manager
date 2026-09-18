@@ -56,12 +56,22 @@ public class TrelloCardRepaint implements ApplicationRunner {
         String bucket = String.valueOf(Instant.now().truncatedTo(ChronoUnit.MINUTES).getEpochSecond());
 
         int queued = 0;
+        int stamped = 0;
         for (PrCardLink link : linkRepository.findByArchivedFalseAndTrelloCardIdIsNotNull()) {
+            if (link.getListEnteredAt() == null) {
+                // Момента не знает никто: карточка попала в колонку до того, как мы
+                // начали его запоминать, а Bitbucket о таком не рассказывает. Берём
+                // текущий — дата «отсюда и дальше» честнее пустоты, которая не говорит
+                // ничего, и уж точно честнее выдуманной задним числом.
+                link.enteredList(Instant.now());
+                stamped++;
+            }
             if (enqueue(link, bucket)) {
                 queued++;
             }
         }
-        log.info("Repaint on start: queued {} card(s) to be redrawn from what we store", queued);
+        log.info("Repaint on start: queued {} card(s) to be redrawn from what we store; "
+                + "{} of them had no known moment and were stamped with now", queued, stamped);
     }
 
     private boolean enqueue(PrCardLink link, String bucket) {
@@ -73,7 +83,10 @@ public class TrelloCardRepaint implements ApplicationRunner {
                 // обложка, участники, чек-лист, момент переезда и момент закрытия — всё
                 // null: карточке нечего сообщить кроме того, что у нас и так записано.
                 null, null, null, null, null, null, null, null, null,
-                false,
+                // Архив не трогаем: перерисовка про вид карточки, а не про то, быть ли
+                // ей на доске. Сказать «не в архиве» значило бы вернуть на доску всё,
+                // что с неё убрали руками.
+                null,
                 null,
                 null,
                 null);
