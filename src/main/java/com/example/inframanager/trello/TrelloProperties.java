@@ -61,6 +61,14 @@ public record TrelloProperties(
          */
         @DefaultValue("normal") String coverSize,
 
+        /**
+         * Разово отослать каждой карточке то, что о ней хранится, — дату начала и
+         * отсутствие срока. Включают на один запуск после раскатки, которая меняет вид
+         * карточки: иначе увидеть новое можно, только дождавшись событий из Bitbucket,
+         * а карточки закрытых пул-реквестов не дождутся их никогда.
+         */
+        @DefaultValue("false") boolean repaintOnStart,
+
         @DefaultValue Reconciliation reconciliation,
 
         @DefaultValue Completion completion) {

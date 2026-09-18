@@ -262,6 +262,11 @@ infra-manager:
       on-drift: log
       # log = report; forget = drop the card id so the next event creates a new card.
       on-missing: log
+    # One-shot repaint: on start, queue every card to be sent what we store about
+    # it -- the start date, and no due date unless it is marked complete. Turn on
+    # for one deploy that changes how cards look, then turn back off. Content
+    # (title, labels, checklist) is not refreshed: that would need Bitbucket.
+    repaint-on-start: ${TRELLO_REPAINT_ON_START:false}
     completion:
       # Карточка пул-реквеста, закрытого дольше after назад, отмечается в Trello
       # выполненной и остаётся на месте. Считается от закрытия в Bitbucket, а не от

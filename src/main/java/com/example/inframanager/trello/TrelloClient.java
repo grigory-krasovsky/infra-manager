@@ -145,28 +145,45 @@ public interface TrelloClient {
         }
     }
 
-    /** {@code idLabels} и {@code idMembers} перечисляются через запятую — так их ждёт Trello. */
+    /**
+     * {@code idLabels} и {@code idMembers} перечисляются через запятую — так их ждёт
+     * Trello. {@code start} — дата начала в ISO-8601: для новой карточки это момент,
+     * когда она попала в свою первую колонку.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     record CreateCardRequest(String idList, String name, String desc, String pos,
-                             String idLabels, String idMembers) {
+                             String idLabels, String idMembers, String start) {
     }
 
     /**
-     * {@code due} — срок в ISO-8601, {@code dueComplete} — отметка «выполнено». Ставятся
-     * только вместе: отметку без срока Trello принимает, но нигде не показывает.
+     * {@code start} — дата начала в ISO-8601: момент, когда карточка попала в нынешнюю
+     * колонку. Именно начала, а не срока: срок в прошлом Trello красит красным, а он у
+     * такой даты в прошлом всегда, и покраснела бы вся доска разом.
      *
+     * <p>{@code dueComplete} — отметка «выполнено», и вот ей срок нужен: без него Trello
+     * отметку принимает, но нигде не показывает. Ставятся они только вместе, и ставит их
+     * один лишь суточный проход.
+     *
+     * @param due   срок в ISO-8601, {@link #NO_DUE} — снять его, null — не трогать.
+     *              Разнотипный по той же причине, что и обложка.
      * @param cover {@link Cover} — поставить обложку, {@link Cover#NONE} — снять, null —
      *              не трогать. Тип {@code Object} потому, что параметр у Trello и правда
      *              разнотипный: объект или пустая строка.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     record UpdateCardRequest(String idList, String name, String desc, Boolean closed,
-                             String idLabels, String idMembers, String due, Boolean dueComplete,
-                             Object cover) {
+                             String idLabels, String idMembers, String start, Object due,
+                             Boolean dueComplete, Object cover) {
+
+        /**
+         * «Снять срок». Пустое значение параметра, а не null: null Jackson из тела
+         * выбросит, и Trello прочитает это как «поле не трогать».
+         */
+        static final String NO_DUE = "";
 
         /** Запрос, который меняет карточке одну лишь обложку. */
         static UpdateCardRequest coverOnly(Object cover) {
-            return new UpdateCardRequest(null, null, null, null, null, null, null, null, cover);
+            return new UpdateCardRequest(null, null, null, null, null, null, null, null, null, cover);
         }
     }
 

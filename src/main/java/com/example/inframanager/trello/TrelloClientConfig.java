@@ -112,6 +112,19 @@ public class TrelloClientConfig implements SchedulingConfigurer {
                 client, listResolver, properties, linkRepository, taskService, objectMapper);
     }
 
+    /**
+     * Поднимается только под флагом: перерисовка — разовое действие под раскатку, а не
+     * режим работы. Забытая включённой, она всего лишь повторяется на каждом старте, и
+     * это видно в логе.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "infra-manager.trello", name = "repaint-on-start", havingValue = "true")
+    TrelloCardRepaint trelloCardRepaint(PrCardLinkRepository linkRepository,
+                                        OutboundTaskService taskService,
+                                        ObjectMapper objectMapper) {
+        return new TrelloCardRepaint(linkRepository, taskService, objectMapper);
+    }
+
     @Bean
     @ConditionalOnProperty(prefix = "infra-manager.trello.completion", name = "enabled", havingValue = "true")
     TrelloCompletionPoller trelloCompletionPoller(TrelloListResolver listResolver,

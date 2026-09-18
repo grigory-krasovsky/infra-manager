@@ -162,7 +162,7 @@ class TrelloChecklistSyncTest {
     private static TrelloProperties properties() {
         return new TrelloProperties(true, "https://api.trello.com", "key", "token",
                 Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofMinutes(10),
-                Map.of(), List.of(), "normal",
+                Map.of(), List.of(), "normal", false,
                 new TrelloProperties.Reconciliation(false, Duration.ofMinutes(15),
                         TrelloProperties.Reconciliation.OnDrift.LOG,
                         TrelloProperties.Reconciliation.OnMissing.LOG),

@@ -107,9 +107,10 @@ public class TrelloSender implements OutboundTaskSender {
 
         TrelloClient.TrelloCard card = client.createCard(properties.key(), properties.token(),
                 new TrelloClient.CreateCardRequest(listId, command.title(), command.description(), "top",
-                        labelIds(command), memberIds(command)));
+                        labelIds(command), memberIds(command), isoSeconds(command.listEnteredAt())));
 
         link.recordCard(card.id(), listId, false);
+        link.enteredList(command.listEnteredAt());
         applyCover(card.id(), command);
         checklistSync.sync(card.id(), command.checklist());
         log.info("Created Trello card {} for {} in list '{}'", card.id(), command.pullRequest().asKey(), listName);
@@ -175,12 +176,12 @@ public class TrelloSender implements OutboundTaskSender {
     }
 
     /**
-     * Срок для Trello. Округляется до секунды: Postgres хранит момент с точностью до
-     * микросекунд, а в сроке карточки эти знаки — мусор, который Trello ещё и может не
-     * принять.
+     * Момент для Trello; null означает «поле не трогать» и так же передаётся дальше.
+     * Округляется до секунды: Postgres хранит момент с точностью до микросекунд, а в
+     * дате карточки эти знаки — мусор, который Trello ещё и может не принять.
      */
     private static String isoSeconds(Instant moment) {
-        return DateTimeFormatter.ISO_INSTANT.format(moment.truncatedTo(ChronoUnit.SECONDS));
+        return moment == null ? null : DateTimeFormatter.ISO_INSTANT.format(moment.truncatedTo(ChronoUnit.SECONDS));
     }
 
     private void updateCard(TrelloCardCommand command, PrCardLink link) {
@@ -188,12 +189,29 @@ public class TrelloSender implements OutboundTaskSender {
                 ? null
                 : listResolver.listId(command.boardId(), command.moveToListName());
         boolean complete = command.completeAsOf() != null;
+        boolean entersList = !complete && changesList(command, link, listId);
+        if (entersList) {
+            link.enteredList(command.listEnteredAt());
+            // Карточка снова о незаконченной работе: отметку забываем, и суточный
+            // проход получает право поставить её заново.
+            link.clearCompleted();
+        }
 
+        // Срок принадлежит одной лишь отметке о выполнении, поэтому и выводится из неё,
+        // а не из того, что сейчас произошло. Нет отметки — нет и срока: непогашенный,
+        // он горел бы на карточке красным, а дата в прошлом у нас на каждой.
+        boolean completed = complete || link.getCompletedAt() != null;
+        Object due = complete ? isoSeconds(command.completeAsOf())
+                : completed ? null : TrelloClient.UpdateCardRequest.NO_DUE;
+        Boolean dueComplete = complete ? Boolean.TRUE : completed ? null : Boolean.FALSE;
+
+        // Дата начала отсылается на каждом обновлении, а не только при переезде: она
+        // такая же часть желаемого состояния карточки, как заголовок. Стёртая руками
+        // вернётся следующим же событием, а перерисовка доски проставит её всем.
         client.updateCard(link.getTrelloCardId(), properties.key(), properties.token(),
                 new TrelloClient.UpdateCardRequest(listId, command.title(), command.description(),
                         command.archive(), labelIds(command), memberIds(command),
-                        complete ? isoSeconds(command.completeAsOf()) : null,
-                        complete ? Boolean.TRUE : null,
+                        isoSeconds(link.getListEnteredAt()), due, dueComplete,
                         coverFor(command)));
 
         link.recordCard(link.getTrelloCardId(),
@@ -205,6 +223,23 @@ public class TrelloSender implements OutboundTaskSender {
         checklistSync.sync(link.getTrelloCardId(), command.checklist());
         log.info("Updated Trello card {} for {}{}{}", link.getTrelloCardId(), command.pullRequest().asKey(),
                 command.moveToListName() == null ? "" : " -> list '" + command.moveToListName() + "'",
-                complete ? " (complete)" : "");
+                complete ? " (complete)"
+                        : entersList ? " (start " + isoSeconds(link.getListEnteredAt()) + ")" : "");
+    }
+
+    /**
+     * Меняет ли эта команда колонку карточки — то есть надо ли переставить дату начала.
+     *
+     * <p>Спрашивается именно про смену, а не про наличие колонки в команде: события,
+     * отображённые на ту же колонку, где карточка уже лежит, идут потоком, и сбрасывать
+     * дату на каждом значило бы вместо «в ревью с понедельника» показывать «в ревью
+     * с последнего касания».
+     *
+     * <p>Команда без момента переезда даты не касается вовсе. Так двигает карточку
+     * сверка: она возвращает на место перетащенную руками, а это не смена состояния,
+     * и датировать им карточку было бы враньём.
+     */
+    private static boolean changesList(TrelloCardCommand command, PrCardLink link, String listId) {
+        return command.listEnteredAt() != null && listId != null && !listId.equals(link.getCurrentListId());
     }
 }

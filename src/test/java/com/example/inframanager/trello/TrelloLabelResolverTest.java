@@ -134,7 +134,7 @@ class TrelloLabelResolverTest {
 
     private static TrelloProperties properties(List<TrelloProperties.LabelColor> colours) {
         return new TrelloProperties(true, "https://api.trello.com", "key", "token",
-                Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofMinutes(10), Map.of(), colours, "normal",
+                Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofMinutes(10), Map.of(), colours, "normal", false,
                 new TrelloProperties.Reconciliation(false, Duration.ofMinutes(15),
                         TrelloProperties.Reconciliation.OnDrift.LOG,
                         TrelloProperties.Reconciliation.OnMissing.LOG),

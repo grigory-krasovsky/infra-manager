@@ -136,9 +136,13 @@ class TrelloCompletionPollerTest {
         assertThat(request.getValue().dueComplete()).isTrue();
         // Срок обязателен: без него отметку Trello нигде не показывает. Секунды — предел
         // осмысленной точности, доли секунды в него не попадают.
-        assertThat(request.getValue().due()).matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
-        // Перемещения нет — только статус.
+        assertThat(request.getValue().due()).asString()
+                .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
+        // Перемещения нет — только статус. Дата начала при этом уходит прежней: отметка
+        // о выполнении не про то, когда карточка попала в колонку.
         assertThat(request.getValue().idList()).isNull();
+        assertThat(request.getValue().start())
+                .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
 
         assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 5))
                 .hasValueSatisfying(link -> assertThat(link.getCompletedAt()).isNotNull());
@@ -172,7 +176,9 @@ class TrelloCompletionPollerTest {
             links.save(link);
         });
         // Момент закрытия приходит из Bitbucket, а здесь его надо просто назначить.
-        jdbc.update("UPDATE pr_card_link SET closed_at = now() - make_interval(days => ?) WHERE pr_id = ?",
-                daysSinceClosed, prId);
+        // Тогда же карточка попала в конечную колонку — этим же моментом она и датирована.
+        jdbc.update("UPDATE pr_card_link SET closed_at = now() - make_interval(days => ?), "
+                        + "list_entered_at = now() - make_interval(days => ?) WHERE pr_id = ?",
+                daysSinceClosed, daysSinceClosed, prId);
     }
 }

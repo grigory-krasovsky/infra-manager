@@ -89,6 +89,8 @@ class BitbucketPrFlowTest {
 
     private static final String URL = "/webhooks/bitbucket";
     private static final String SECRET = "hook-secret";
+    /** Момент до секунды — в таком виде Trello принимает даты. */
+    private static final String ISO_SECONDS = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z";
 
     @Autowired
     private MockMvc mockMvc;
@@ -151,12 +153,17 @@ class BitbucketPrFlowTest {
         // Проект — чтобы на общей доске можно было отобрать карточки одного репозитория
         // фильтром; ветка — чтобы было видно, куда поедет изменение.
         assertThat(request.getValue().idLabels()).isEqualTo("label-BACK,label-main");
+        // Дата начала — момент, когда карточка попала в свою первую колонку.
+        assertThat(request.getValue().start()).matches(ISO_SECONDS);
 
         assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 42))
                 .hasValueSatisfying(link -> {
                     assertThat(link.getTrelloCardId()).isEqualTo("card-1");
                     assertThat(link.getCurrentListId()).isEqualTo("list-review");
                     assertThat(link.isArchived()).isFalse();
+                    // Дата начала помнится у себя, а не только на карточке: иначе
+                    // перерисовывать доску было бы нечем.
+                    assertThat(link.getListEnteredAt()).isNotNull();
                 });
     }
 
@@ -175,6 +182,60 @@ class BitbucketPrFlowTest {
         verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
         assertThat(request.getValue().idList()).isEqualTo("list-merged");
         assertThat(request.getValue().closed()).isFalse();
+        // Переезд переставляет дату начала: по ней на доске видно, когда PR влили.
+        assertThat(request.getValue().start()).matches(ISO_SECONDS);
+        // Срок при этом снимается, а не ставится: срок в прошлом Trello красит красным,
+        // и доска, где каждая карточка просрочена, не сообщает ничего.
+        assertThat(request.getValue().due()).isEqualTo("");
+        assertThat(request.getValue().dueComplete()).isFalse();
+    }
+
+    @Test
+    void anEventIntoTheListTheCardAlreadySitsInDoesNotRestartItsClock() throws Exception {
+        deliver("pr:opened", payload(73, "Fix"));
+        drain();
+        // Новые коммиты возвращают карточку туда же, где она и лежит: обесценивать
+        // апрува нечего. Дата обязана устоять, иначе «в ревью с понедельника»
+        // превратилось бы в «в ревью с последнего пуша».
+        deliver("pr:from_ref_updated", payload(73, "Fix"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.UpdateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
+        verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
+        assertThat(request.getValue().idList()).isEqualTo("list-review");
+        assertThat(request.getValue().start()).isEqualTo(createdCardStart());
+        assertThat(request.getValue().due()).isEqualTo("");
+        assertThat(request.getValue().dueComplete()).isFalse();
+    }
+
+    @Test
+    void aCardThatLeavesItsFinalListForgetsThatItWasComplete() throws Exception {
+        deliver("pr:opened", payload(74, "Fix"));
+        drain();
+        deliver("pr:merged", payload(74, "Fix"));
+        drain();
+        // Так выглядит карточка, которую суточный проход уже отметил выполненной.
+        jdbc.update("UPDATE pr_card_link SET completed_at = now() WHERE pr_id = 74");
+
+        // Пул-реквест переоткрыли — карточка едет обратно в ревью.
+        deliver("pr:opened", payload(74, "Fix again"));
+        drain();
+
+        ArgumentCaptor<TrelloClient.UpdateCardRequest> request =
+                ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
+        verify(trelloClient, org.mockito.Mockito.times(2))
+                .updateCard(eq("card-1"), anyString(), anyString(), request.capture());
+        TrelloClient.UpdateCardRequest back = request.getAllValues().get(1);
+        assertThat(back.idList()).isEqualTo("list-review");
+        assertThat(back.dueComplete()).isFalse();
+        // Вместе с отметкой снимается и её срок: иначе он остался бы на карточке
+        // непогашенным и Trello покрасил бы его красным.
+        assertThat(back.due()).isEqualTo("");
+        // Отметку забыли и у себя: иначе проход больше никогда не увидел бы эту карточку
+        // и она не смогла бы состариться до «выполнено» во второй раз.
+        assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 74))
+                .hasValueSatisfying(link -> assertThat(link.getCompletedAt()).isNull());
     }
 
     @Test
@@ -190,6 +251,14 @@ class BitbucketPrFlowTest {
         verify(trelloClient).updateCard(eq("card-1"), anyString(), anyString(), request.capture());
         assertThat(request.getValue().idList()).isNull();
         assertThat(request.getValue().name()).isEqualTo("BACK · New title");
+        // Дата начала уходит и здесь — она часть состояния карточки, а не разницы, —
+        // но та же самая: колонку это событие не меняет. Именно это и делает
+        // перерисовку доски возможной: обычное обновление проставляет дату заново.
+        assertThat(request.getValue().start()).isEqualTo(createdCardStart());
+        // А срок снимается: он выводится из отметки о выполнении, которой у этой
+        // карточки нет. Потому перерисовка доски и убирает красноту, оставшуюся от
+        // чьей-нибудь прошлой попытки датировать карточку сроком.
+        assertThat(request.getValue().due()).isEqualTo("");
     }
 
     @Test
@@ -432,6 +501,14 @@ class BitbucketPrFlowTest {
     private void drain() {
         inboundWorker.runOnce();
         outboundWorker.runOnce();
+    }
+
+    /** @return дата начала, с которой карточку завели, — чтобы сверять, что она устояла */
+    private String createdCardStart() {
+        ArgumentCaptor<TrelloClient.CreateCardRequest> created =
+                ArgumentCaptor.forClass(TrelloClient.CreateCardRequest.class);
+        verify(trelloClient).createCard(anyString(), anyString(), created.capture());
+        return created.getValue().start();
     }
 
     private void deliver(String eventKey, String body) throws Exception {

@@ -59,6 +59,17 @@ public class PrCardLink {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    /**
+     * С какого момента карточка лежит в нынешней колонке — то, что показано на ней датой
+     * начала. Null — момент неизвестен, и дату на карточке трогать нечем.
+     *
+     * <p>Хранится, чтобы быть частью желаемого состояния карточки, а не разницей: каждое
+     * обновление отсылает эту дату заново, поэтому стёртая руками восстановится сама, а
+     * перерисовка доски проставит её всем разом.
+     */
+    @Column(name = "list_entered_at")
+    private Instant listEnteredAt;
+
     @Column(nullable = false)
     private boolean archived;
 
@@ -134,6 +145,16 @@ public class PrCardLink {
         return completedAt;
     }
 
+    public Instant getListEnteredAt() {
+        return listEnteredAt;
+    }
+
+    /** Карточка попала в колонку — запоминаем, каким моментом это датировано. */
+    public void enteredList(Instant moment) {
+        this.listEnteredAt = moment;
+        touch();
+    }
+
     public void recordCard(String cardId, String listId, boolean archived) {
         this.trelloCardId = cardId;
         this.currentListId = listId;
@@ -144,6 +165,16 @@ public class PrCardLink {
     /** Запоминает, что карточка уже отмечена выполненной, — чтобы не отмечать её каждые сутки заново. */
     public void markCompleted() {
         this.completedAt = Instant.now();
+        touch();
+    }
+
+    /**
+     * Забывает отметку: карточка переехала в другую колонку, и отметку вместе со сроком
+     * с неё сняли. Переоткрытый пул-реквест должен иметь право снова состариться до
+     * «выполнено», а с непустым {@code completed_at} суточный проход его больше не видит.
+     */
+    public void clearCompleted() {
+        this.completedAt = null;
         touch();
     }
 

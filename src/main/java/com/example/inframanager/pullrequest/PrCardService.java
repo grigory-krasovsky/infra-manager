@@ -104,6 +104,8 @@ public class PrCardService implements InboundEventHandler {
         // Никогда не бросает исключение: карточка с более скупым заголовком лучше, чем её отсутствие.
         String issueSummary = jiraEnricher.summaryFor(issueKey).orElse(null);
 
+        Instant closedAt = closedAt(eventKey, parsed);
+
         TrelloCardCommand command = new TrelloCardCommand(
                 ref,
                 board.get().trelloBoardId(),
@@ -117,7 +119,8 @@ public class PrCardService implements InboundEventHandler {
                 authorCandidates(parsed),
                 checklistFor(ref),
                 false,
-                closedAt(eventKey, parsed),
+                listEnteredAt(closedAt, event),
+                closedAt,
                 // Отметку о выполнении ставит суточный проход по возрасту пул-реквеста,
                 // а не событие: событие «неделя прошла» никто не присылает.
                 null);
@@ -149,6 +152,9 @@ public class PrCardService implements InboundEventHandler {
                 // отказывается заводить безымянную.
                 null, null, null, null, null, null, null, null, null,
                 true,
+                // Архивация — не переезд в колонку: срок карточки остаётся тем, каким
+                // был, и в архиве видно, на чём она остановилась.
+                null,
                 null,
                 null);
 
@@ -183,6 +189,21 @@ public class PrCardService implements InboundEventHandler {
             return null;
         }
         return parsed.closedInstant().orElseGet(Instant::now);
+    }
+
+    /**
+     * Чем датировать переезд карточки в колонку — он же её срок, по которому на доске
+     * видно, когда пул-реквест ушёл в ревью, когда у него запросили правки и когда его
+     * влили.
+     *
+     * <p>У закрытия момент есть настоящий, и берётся он. У всего остального момента в
+     * Bitbucket нет: {@code updatedDate} на вердикт ревьюера и на задачи не сдвигается —
+     * в наших же данных он у иного пул-реквеста стоит на месте месяцами, пока события
+     * идут одно за другим. Остаётся время, когда событие до нас дошло; на пути с опросом
+     * это правда с точностью до интервала опроса, и это лучшее, что тут есть.
+     */
+    private static Instant listEnteredAt(Instant closedAt, InboundEvent event) {
+        return closedAt != null ? closedAt : event.getReceivedAt();
     }
 
     /**
