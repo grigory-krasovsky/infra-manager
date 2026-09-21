@@ -158,22 +158,22 @@ public interface TrelloClient {
     /**
      * {@code start} — дата начала в ISO-8601: момент, когда карточка попала в нынешнюю
      * колонку. Именно начала, а не срока: срок в прошлом Trello красит красным, а он у
-     * такой даты в прошлом всегда, и покраснела бы вся доска разом.
+     * такой даты в прошлом всегда, и покраснела бы вся доска разом. Своих сроков мы
+     * карточкам не ставим вовсе — поле есть только чтобы чужой снимать.
      *
-     * <p>{@code dueComplete} — отметка «выполнено», и вот ей срок нужен: без него Trello
-     * отметку принимает, но нигде не показывает. Ставятся они только вместе, и ставит их
-     * один лишь суточный проход.
-     *
-     * @param due   срок в ISO-8601, {@link #NO_DUE} — снять его, null — не трогать.
-     *              Разнотипный по той же причине, что и обложка.
-     * @param cover {@link Cover} — поставить обложку, {@link Cover#NONE} — снять, null —
-     *              не трогать. Тип {@code Object} потому, что параметр у Trello и правда
-     *              разнотипный: объект или пустая строка.
+     * @param closed {@link Boolean#TRUE} — убрать в архив, null — не трогать.
+     *               {@code false} здесь значит «достать из архива», а этого не хочет
+     *               никто, и однажды это уже вернуло на доску 47 убранных карточек.
+     * @param due    срок в ISO-8601, {@link #NO_DUE} — снять его, null — не трогать.
+     *               Разнотипный по той же причине, что и обложка.
+     * @param cover  {@link Cover} — поставить обложку, {@link Cover#NONE} — снять, null —
+     *               не трогать. Тип {@code Object} потому, что параметр у Trello и правда
+     *               разнотипный: объект или пустая строка.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     record UpdateCardRequest(String idList, String name, String desc, Boolean closed,
                              String idLabels, String idMembers, String start, Object due,
-                             Boolean dueComplete, Object cover) {
+                             Object cover) {
 
         /**
          * «Снять срок». Пустое значение параметра, а не null: null Jackson из тела
@@ -183,7 +183,7 @@ public interface TrelloClient {
 
         /** Запрос, который меняет карточке одну лишь обложку. */
         static UpdateCardRequest coverOnly(Object cover) {
-            return new UpdateCardRequest(null, null, null, null, null, null, null, null, null, cover);
+            return new UpdateCardRequest(null, null, null, null, null, null, null, null, cover);
         }
     }
 

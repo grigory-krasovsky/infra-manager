@@ -267,14 +267,13 @@ infra-manager:
     # for one deploy that changes how cards look, then turn back off. Content
     # (title, labels, checklist) is not refreshed: that would need Bitbucket.
     repaint-on-start: ${TRELLO_REPAINT_ON_START:false}
-    completion:
-      # Карточка пул-реквеста, закрытого дольше after назад, отмечается в Trello
-      # выполненной и остаётся на месте. Считается от закрытия в Bitbucket, а не от
-      # переезда карточки; проверяется, что она лежит в одной из конечных колонок —
-      # тех, куда её кладут pr:merged и pr:declined. Вместе с отметкой проставляется
-      # срок, равный моменту закрытия: без срока Trello отметку хранит, но не
-      # показывает.
-      enabled: ${TRELLO_COMPLETION_ENABLED:false}
+    archive:
+      # Карточка пул-реквеста, закрытого дольше after назад, уезжает с доски в архив.
+      # Считается от закрытия в Bitbucket, а не от переезда карточки; проверяется, что
+      # она лежит в одной из конечных колонок — тех, куда её кладут pr:merged и
+      # pr:declined. Доска нужна для идущей работы, а из архива карточка никуда не
+      # девается: Trello держит её и отдаёт поиском.
+      enabled: ${TRELLO_ARCHIVE_ENABLED:false}
       interval: 24h
       after: 7d
 

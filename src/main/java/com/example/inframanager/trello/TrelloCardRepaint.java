@@ -88,7 +88,6 @@ public class TrelloCardRepaint implements ApplicationRunner {
                 // что с неё убрали руками.
                 null,
                 null,
-                null,
                 null);
 
         return taskService.enqueue(OutboundTarget.TRELLO, "syncCard",

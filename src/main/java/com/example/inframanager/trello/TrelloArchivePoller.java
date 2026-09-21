@@ -16,28 +16,33 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Отмечает выполненными карточки пул-реквестов, закрытых неделю назад и больше.
+ * Убирает с доски в архив карточки пул-реквестов, закрытых неделю назад и больше.
+ *
+ * <p>Доска нужна, чтобы видеть идущую работу. Конечные колонки иначе растут без предела,
+ * и через полгода между сотней влитых пул-реквестов уже не найти тот, что закончился
+ * вчера. Из архива карточка никуда не девается: Trello держит её и отдаёт поиском.
  *
  * <p>Конечных исходов у пул-реквеста два — влит и отклонён, — и для доски они
  * равнозначны: решение принято, и через неделю к нему уже не возвращаются. Отклонённый
- * ничем не «хуже» влитого, потому что отметка говорит не «сделано хорошо», а «здесь
- * всё закончено».
+ * ничем не «хуже» влитого, потому что архив говорит не «сделано хорошо», а «здесь всё
+ * закончено».
  *
  * <p>Неделя считается от закрытия пул-реквеста в Bitbucket, а не от переезда карточки:
  * в колонку она попадает позже — на время простоя сервиса, а перетащенная руками и на
  * сколько угодно, — и отсчёт от доски растягивал бы срок на ровном месте.
  *
  * <p>Колонка при этом всё равно проверяется: карточка, которую увезли из «влито» или
- * «отклонено», на доске больше не о законченной работе, что бы ни было в Bitbucket.
- * Имена колонок берутся из отображения {@code pr:merged} и {@code pr:declined} — заводить
- * вторую настройку с тем же смыслом значило бы дать им однажды разойтись.
+ * «отклонено», на доске больше не о законченной работе, что бы ни было в Bitbucket, —
+ * и убирать её рано. Имена колонок берутся из отображения {@code pr:merged} и
+ * {@code pr:declined} — заводить вторую настройку с тем же смыслом значило бы дать им
+ * однажды разойтись.
  *
  * <p>Это опрос, а не обработчик события, потому что события тут и нет: «прошла неделя»
  * никто не присылает, это можно только заметить самому.
  */
-public class TrelloCompletionPoller {
+public class TrelloArchivePoller {
 
-    private static final Logger log = LoggerFactory.getLogger(TrelloCompletionPoller.class);
+    private static final Logger log = LoggerFactory.getLogger(TrelloArchivePoller.class);
 
     /** События, которыми жизнь пул-реквеста кончается, — и колонки, куда они кладут карточку. */
     private static final List<String> CLOSING_EVENTS = List.of("pr:merged", "pr:declined");
@@ -49,12 +54,12 @@ public class TrelloCompletionPoller {
     private final OutboundTaskService taskService;
     private final ObjectMapper objectMapper;
 
-    public TrelloCompletionPoller(TrelloListResolver listResolver,
-                                  LifecycleProperties lifecycle,
-                                  TrelloProperties properties,
-                                  PrCardLinkRepository linkRepository,
-                                  OutboundTaskService taskService,
-                                  ObjectMapper objectMapper) {
+    public TrelloArchivePoller(TrelloListResolver listResolver,
+                               LifecycleProperties lifecycle,
+                               TrelloProperties properties,
+                               PrCardLinkRepository linkRepository,
+                               OutboundTaskService taskService,
+                               ObjectMapper objectMapper) {
         this.listResolver = listResolver;
         this.lifecycle = lifecycle;
         this.properties = properties;
@@ -63,7 +68,7 @@ public class TrelloCompletionPoller {
         this.objectMapper = objectMapper;
     }
 
-    /** @return сколько карточек этот проход поставил в очередь на отметку */
+    /** @return сколько карточек этот проход поставил в очередь на архивацию */
     @Transactional
     public int runOnce() {
         List<String> finalLists = CLOSING_EVENTS.stream()
@@ -74,11 +79,11 @@ public class TrelloCompletionPoller {
         if (finalLists.isEmpty()) {
             // Ни одно закрывающее событие не отображено на колонку: доске нечего считать
             // законченным.
-            log.debug("No list is mapped to any of {}; nothing can age into 'complete'", CLOSING_EVENTS);
+            log.debug("No list is mapped to any of {}; nothing can age out of the board", CLOSING_EVENTS);
             return 0;
         }
 
-        Instant closedBefore = Instant.now().minus(properties.completion().after());
+        Instant closedBefore = Instant.now().minus(properties.archive().after());
         int queued = 0;
         for (PrCardLink link : linkRepository.findClosedBefore(closedBefore)) {
             try {
@@ -88,7 +93,7 @@ public class TrelloCompletionPoller {
                 }
             } catch (Exception e) {
                 // Одна проблемная карточка не должна прерывать весь обход.
-                log.warn("Could not mark card {} for {}/{}/{} complete", link.getTrelloCardId(),
+                log.warn("Could not archive card {} for {}/{}/{}", link.getTrelloCardId(),
                         link.getProjectKey(), link.getRepoSlug(), link.getPrId(), e);
             }
         }
@@ -114,7 +119,8 @@ public class TrelloCompletionPoller {
                 null,
                 null,
                 // Заголовок, описание, ключ задачи, метки, обложка, участники и чек-лист —
-                // null: содержимое карточки не меняется, меняется только её статус.
+                // null: карточка уезжает с доски в последнем известном виде. Переписывать
+                // её перед этим незачем, да и нечем.
                 null,
                 null,
                 null,
@@ -122,24 +128,22 @@ public class TrelloCompletionPoller {
                 null,
                 null,
                 null,
-                // Архив не при чём: отметка о выполнении карточку с доски не убирает,
-                // а сказать «не в архиве» значило бы достать оттуда убранную руками.
-                null,
-                // Переезда нет — значит, и срок «когда карточка попала в колонку»
-                // переставлять не за что. Свой срок эта команда ставит сама, ниже.
+                // Единственное, что эта команда и делает.
+                Boolean.TRUE,
+                // Переезда нет: карточка уходит с доски из той колонки, в которой лежит,
+                // и дату начала — «попала сюда тогда-то» — уносит с собой.
                 null,
                 // Момент закрытия уже записан в связку, повторять его команде незачем.
-                null,
-                link.getClosedAt());
+                null);
 
         // Ключ выведен из факта «закрыт тогда-то», а не из текущего времени: повторный
         // проход ничего не добавит, а пул-реквест, закрытый заново после переоткрытия,
         // получит собственную задачу.
-        String dedupKey = "trello:complete:%s:%d".formatted(ref.asKey(), link.getClosedAt().getEpochSecond());
+        String dedupKey = "trello:archive:%s:%d".formatted(ref.asKey(), link.getClosedAt().getEpochSecond());
         boolean queued = taskService.enqueue(OutboundTarget.TRELLO, "syncCard", dedupKey,
                 objectMapper.writeValueAsString(command));
         if (queued) {
-            log.info("{} was closed at {} and its card {} sits in '{}'; queueing it as complete",
+            log.info("{} was closed at {} and its card {} still sits in '{}'; queueing it for the archive",
                     ref.asKey(), link.getClosedAt(), link.getTrelloCardId(), listName);
         }
         return queued;

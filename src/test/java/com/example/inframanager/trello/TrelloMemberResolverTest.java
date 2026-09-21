@@ -157,6 +157,6 @@ class TrelloMemberResolverTest {
                 new TrelloProperties.Reconciliation(false, Duration.ofMinutes(15),
                         TrelloProperties.Reconciliation.OnDrift.LOG,
                         TrelloProperties.Reconciliation.OnMissing.LOG),
-                new TrelloProperties.Completion(false, Duration.ofHours(24), Duration.ofDays(7)));
+                new TrelloProperties.Archive(false, Duration.ofHours(24), Duration.ofDays(7)));
     }
 }

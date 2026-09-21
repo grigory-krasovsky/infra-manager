@@ -1,6 +1,7 @@
 package com.example.inframanager.pullrequest;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 
@@ -190,7 +191,6 @@ class BitbucketPrFlowTest {
         // Срок при этом снимается, а не ставится: срок в прошлом Trello красит красным,
         // и доска, где каждая карточка просрочена, не сообщает ничего.
         assertThat(request.getValue().due()).isEqualTo("");
-        assertThat(request.getValue().dueComplete()).isFalse();
     }
 
     @Test
@@ -209,19 +209,18 @@ class BitbucketPrFlowTest {
         assertThat(request.getValue().idList()).isEqualTo("list-review");
         assertThat(request.getValue().start()).isEqualTo(createdCardStart());
         assertThat(request.getValue().due()).isEqualTo("");
-        assertThat(request.getValue().dueComplete()).isFalse();
     }
 
     @Test
-    void aCardThatLeavesItsFinalListForgetsThatItWasComplete() throws Exception {
+    void aReopenedPullRequestSendsTheCardBackAndRestartsItsClock() throws Exception {
         deliver("pr:opened", payload(74, "Fix"));
         drain();
         deliver("pr:merged", payload(74, "Fix"));
         drain();
-        // Так выглядит карточка, которую суточный проход уже отметил выполненной.
-        jdbc.update("UPDATE pr_card_link SET completed_at = now() WHERE pr_id = 74");
+        Instant whenMerged = links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 74)
+                .orElseThrow().getListEnteredAt();
 
-        // Пул-реквест переоткрыли — карточка едет обратно в ревью.
+        // Пул-реквест переоткрыли — карточка едет из «влито» обратно в ревью.
         deliver("pr:opened", payload(74, "Fix again"));
         drain();
 
@@ -231,14 +230,15 @@ class BitbucketPrFlowTest {
                 .updateCard(eq("card-1"), anyString(), anyString(), request.capture());
         TrelloClient.UpdateCardRequest back = request.getAllValues().get(1);
         assertThat(back.idList()).isEqualTo("list-review");
-        assertThat(back.dueComplete()).isFalse();
-        // Вместе с отметкой снимается и её срок: иначе он остался бы на карточке
-        // непогашенным и Trello покрасил бы его красным.
-        assertThat(back.due()).isEqualTo("");
-        // Отметку забыли и у себя: иначе проход больше никогда не увидел бы эту карточку
-        // и она не смогла бы состариться до «выполнено» во второй раз.
+        // С доски карточка при этом не уезжает: про архив здесь не сказано ничего.
+        assertThat(back.closed()).isNull();
+
+        // Колонка сменилась по-настоящему, значит и дата начала новая: карточка лежит
+        // в ревью с этой минуты, а не с того дня, когда её влили. Сверяется по записи,
+        // а не по запросу: в запрос момент уходит округлённым до секунды, и в тесте оба
+        // события попадают в одну и ту же.
         assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 74))
-                .hasValueSatisfying(link -> assertThat(link.getCompletedAt()).isNull());
+                .hasValueSatisfying(link -> assertThat(link.getListEnteredAt()).isAfter(whenMerged));
     }
 
     @Test

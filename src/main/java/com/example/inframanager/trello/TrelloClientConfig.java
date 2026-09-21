@@ -32,12 +32,12 @@ public class TrelloClientConfig implements SchedulingConfigurer {
     private final TrelloProperties properties;
     private final WorkerProperties workerProperties;
     private final ObjectProvider<TrelloReconciliationPoller> reconciliationPoller;
-    private final ObjectProvider<TrelloCompletionPoller> completionPoller;
+    private final ObjectProvider<TrelloArchivePoller> archivePoller;
 
     public TrelloClientConfig(TrelloProperties properties,
                               WorkerProperties workerProperties,
                               ObjectProvider<TrelloReconciliationPoller> reconciliationPoller,
-                              ObjectProvider<TrelloCompletionPoller> completionPoller) {
+                              ObjectProvider<TrelloArchivePoller> archivePoller) {
         if (!StringUtils.hasText(properties.key()) || !StringUtils.hasText(properties.token())) {
             throw new IllegalStateException(
                     "infra-manager.trello.enabled=true requires TRELLO_KEY and TRELLO_TOKEN; "
@@ -46,7 +46,7 @@ public class TrelloClientConfig implements SchedulingConfigurer {
         this.properties = properties;
         this.workerProperties = workerProperties;
         this.reconciliationPoller = reconciliationPoller;
-        this.completionPoller = completionPoller;
+        this.archivePoller = archivePoller;
     }
 
     @Bean
@@ -126,13 +126,13 @@ public class TrelloClientConfig implements SchedulingConfigurer {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "infra-manager.trello.completion", name = "enabled", havingValue = "true")
-    TrelloCompletionPoller trelloCompletionPoller(TrelloListResolver listResolver,
-                                                  LifecycleProperties lifecycle,
-                                                  PrCardLinkRepository linkRepository,
-                                                  OutboundTaskService taskService,
-                                                  ObjectMapper objectMapper) {
-        return new TrelloCompletionPoller(
+    @ConditionalOnProperty(prefix = "infra-manager.trello.archive", name = "enabled", havingValue = "true")
+    TrelloArchivePoller trelloArchivePoller(TrelloListResolver listResolver,
+                                            LifecycleProperties lifecycle,
+                                            PrCardLinkRepository linkRepository,
+                                            OutboundTaskService taskService,
+                                            ObjectMapper objectMapper) {
+        return new TrelloArchivePoller(
                 listResolver, lifecycle, properties, linkRepository, taskService, objectMapper);
     }
 
@@ -147,11 +147,11 @@ public class TrelloClientConfig implements SchedulingConfigurer {
                     () -> reconciliationPoller.getObject().runOnce(), properties.reconciliation().interval());
             log.info("Trello reconciliation scheduled every {}", properties.reconciliation().interval());
         }
-        if (properties.completion().enabled()) {
+        if (properties.archive().enabled()) {
             registrar.addFixedDelayTask(
-                    () -> completionPoller.getObject().runOnce(), properties.completion().interval());
-            log.info("Trello card completion scheduled every {}, for pull requests closed over {} ago",
-                    properties.completion().interval(), properties.completion().after());
+                    () -> archivePoller.getObject().runOnce(), properties.archive().interval());
+            log.info("Trello card archival scheduled every {}, for pull requests closed over {} ago",
+                    properties.archive().interval(), properties.archive().after());
         }
     }
 }

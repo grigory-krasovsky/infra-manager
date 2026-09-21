@@ -122,10 +122,7 @@ public class PrCardService implements InboundEventHandler {
                 // вернул бы на доску всё, что с неё убрали руками.
                 null,
                 listEnteredAt(closedAt, event),
-                closedAt,
-                // Отметку о выполнении ставит суточный проход по возрасту пул-реквеста,
-                // а не событие: событие «неделя прошла» никто не присылает.
-                null);
+                closedAt);
 
         enqueue(ref, event, command);
 
@@ -154,9 +151,8 @@ public class PrCardService implements InboundEventHandler {
                 // отказывается заводить безымянную.
                 null, null, null, null, null, null, null, null, null,
                 Boolean.TRUE,
-                // Архивация — не переезд в колонку: срок карточки остаётся тем, каким
-                // был, и в архиве видно, на чём она остановилась.
-                null,
+                // Архивация — не переезд в колонку: дата начала остаётся той, какой
+                // была, и в архиве видно, на чём карточка остановилась.
                 null,
                 null);
 

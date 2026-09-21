@@ -25,7 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Взросление карточки до «выполнено»: неделя с закрытия пул-реквеста — и отметка.
+ * Взросление карточки до архива: неделя с закрытия пул-реквеста — и она уходит с доски.
  *
  * <p>Возраст — состояние, которого нет ни в одном отдельном событии, поэтому проверяется
  * он на нашей собственной записи, а Trello подменён.
@@ -35,8 +35,8 @@ import static org.mockito.Mockito.when;
         "infra-manager.trello.enabled=true",
         "infra-manager.trello.key=test-key",
         "infra-manager.trello.token=test-token",
-        "infra-manager.trello.completion.enabled=true",
-        "infra-manager.trello.completion.after=7d",
+        "infra-manager.trello.archive.enabled=true",
+        "infra-manager.trello.archive.after=7d",
         // Объявлено здесь, а не унаследовано из application.yaml: конечные колонки — это
         // то, что оказалось на конкретной доске, и их переименование не должно ломать тест.
         "infra-manager.lifecycle.event-to-list[0].event=pr:merged",
@@ -45,10 +45,10 @@ import static org.mockito.Mockito.when;
         "infra-manager.lifecycle.event-to-list[1].list=Declined"
 })
 @Import(TestcontainersConfiguration.class)
-class TrelloCompletionPollerTest {
+class TrelloArchivePollerTest {
 
     @Autowired
-    private TrelloCompletionPoller poller;
+    private TrelloArchivePoller poller;
     @Autowired
     private OutboundTaskWorker outboundWorker;
     @Autowired
@@ -74,15 +74,15 @@ class TrelloCompletionPollerTest {
     }
 
     @Test
-    void aPullRequestMergedAWeekAgoIsQueuedAsComplete() {
+    void aPullRequestMergedAWeekAgoIsQueuedForTheArchive() {
         givenLink(1, "card-1", "list-merged", 8);
 
         assertThat(poller.runOnce()).isEqualTo(1);
 
         // Postgres перерисовывает jsonb со своими пробелами, поэтому сверяемся по значениям.
         assertThat(jdbc.queryForObject(
-                "SELECT payload->>'completeAsOf' FROM outbound_task LIMIT 1", String.class)).isNotNull();
-        // Карточка остаётся на месте, и содержимое её не переписывается.
+                "SELECT payload->>'archive' FROM outbound_task LIMIT 1", String.class)).isEqualTo("true");
+        // Карточка уезжает с доски из той колонки, где лежит, и в последнем известном виде.
         assertThat(jdbc.queryForObject(
                 "SELECT payload->>'moveToListName' FROM outbound_task LIMIT 1", String.class)).isNull();
         assertThat(jdbc.queryForObject(
@@ -90,7 +90,7 @@ class TrelloCompletionPollerTest {
     }
 
     @Test
-    void aDeclinedPullRequestCompletesJustTheSame() {
+    void aDeclinedPullRequestIsArchivedJustTheSame() {
         givenLink(2, "card-2", "list-declined", 8);
 
         assertThat(poller.runOnce()).isEqualTo(1);
@@ -117,14 +117,14 @@ class TrelloCompletionPollerTest {
         givenLink(4, "card-4", "list-merged", 8);
 
         assertThat(poller.runOnce()).isEqualTo(1);
-        // Задача ещё не выполнена, отметки на связке нет — и всё равно второй такой же
-        // задачи не появляется.
+        // Задача ещё не выполнена, связка ещё не помечена архивной — и всё равно второй
+        // такой же задачи не появляется.
         assertThat(poller.runOnce()).isZero();
         assertThat(outboundTasks.count()).isEqualTo(1);
     }
 
     @Test
-    void theMarkReachesTrelloWithADueDateAndIsRememberedOnTheLink() {
+    void theArchivalReachesTrelloAndIsRememberedOnTheLink() {
         givenLink(5, "card-5", "list-merged", 8);
         poller.runOnce();
 
@@ -133,25 +133,21 @@ class TrelloCompletionPollerTest {
         ArgumentCaptor<TrelloClient.UpdateCardRequest> request =
                 ArgumentCaptor.forClass(TrelloClient.UpdateCardRequest.class);
         verify(trelloClient).updateCard(eq("card-5"), anyString(), anyString(), request.capture());
-        assertThat(request.getValue().dueComplete()).isTrue();
-        // Срок обязателен: без него отметку Trello нигде не показывает. Секунды — предел
-        // осмысленной точности, доли секунды в него не попадают.
-        assertThat(request.getValue().due()).asString()
-                .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
-        // Перемещения нет — только статус. Дата начала при этом уходит прежней: отметка
-        // о выполнении не про то, когда карточка попала в колонку.
+        assertThat(request.getValue().closed()).isTrue();
+        // Перемещения нет: карточка уходит с доски из той колонки, в которой лежит.
+        // Дату начала уносит с собой — в архиве видно, на чём она остановилась.
         assertThat(request.getValue().idList()).isNull();
         assertThat(request.getValue().start())
                 .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
 
         assertThat(links.findByProjectKeyAndRepoSlugAndPrId("INFRA", "backend", 5))
-                .hasValueSatisfying(link -> assertThat(link.getCompletedAt()).isNotNull());
+                .hasValueSatisfying(link -> assertThat(link.isArchived()).isTrue());
     }
 
     @Test
-    void anAlreadyCompletedCardIsNotMarkedAgain() {
+    void anAlreadyArchivedCardIsNotQueuedAgain() {
         givenLink(6, "card-6", "list-merged", 8);
-        jdbc.update("UPDATE pr_card_link SET completed_at = now() WHERE pr_id = 6");
+        jdbc.update("UPDATE pr_card_link SET archived = true WHERE pr_id = 6");
 
         assertThat(poller.runOnce()).isZero();
         assertThat(outboundTasks.count()).isZero();

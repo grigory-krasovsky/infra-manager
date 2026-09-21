@@ -188,43 +188,30 @@ public class TrelloSender implements OutboundTaskSender {
         String listId = command.moveToListName() == null
                 ? null
                 : listResolver.listId(command.boardId(), command.moveToListName());
-        boolean complete = command.completeAsOf() != null;
-        boolean entersList = !complete && changesList(command, link, listId);
-        if (entersList) {
+        if (changesList(command, link, listId)) {
             link.enteredList(command.listEnteredAt());
-            // Карточка снова о незаконченной работе: отметку забываем, и суточный
-            // проход получает право поставить её заново.
-            link.clearCompleted();
         }
-
-        // Срок принадлежит одной лишь отметке о выполнении, поэтому и выводится из неё,
-        // а не из того, что сейчас произошло. Нет отметки — нет и срока: непогашенный,
-        // он горел бы на карточке красным, а дата в прошлом у нас на каждой.
-        boolean completed = complete || link.getCompletedAt() != null;
-        Object due = complete ? isoSeconds(command.completeAsOf())
-                : completed ? null : TrelloClient.UpdateCardRequest.NO_DUE;
-        Boolean dueComplete = complete ? Boolean.TRUE : completed ? null : Boolean.FALSE;
 
         // Дата начала отсылается на каждом обновлении, а не только при переезде: она
         // такая же часть желаемого состояния карточки, как заголовок. Стёртая руками
         // вернётся следующим же событием, а перерисовка доски проставит её всем.
+        //
+        // Срок при этом снимается всегда. Своих сроков мы карточкам не ставим — всё,
+        // что нам нужно сказать датой, говорит дата начала, — а чужой, выставленный
+        // руками, к нынешнему дню уже прошёл и горит на доске красным.
         client.updateCard(link.getTrelloCardId(), properties.key(), properties.token(),
                 new TrelloClient.UpdateCardRequest(listId, command.title(), command.description(),
                         command.archive(), labelIds(command), memberIds(command),
-                        isoSeconds(link.getListEnteredAt()), due, dueComplete,
+                        isoSeconds(link.getListEnteredAt()), TrelloClient.UpdateCardRequest.NO_DUE,
                         coverFor(command)));
 
         link.recordCard(link.getTrelloCardId(),
                 listId != null ? listId : link.getCurrentListId(),
                 archives(command) || link.isArchived());
-        if (complete) {
-            link.markCompleted();
-        }
         checklistSync.sync(link.getTrelloCardId(), command.checklist());
         log.info("Updated Trello card {} for {}{}{}", link.getTrelloCardId(), command.pullRequest().asKey(),
                 command.moveToListName() == null ? "" : " -> list '" + command.moveToListName() + "'",
-                complete ? " (complete)"
-                        : entersList ? " (start " + isoSeconds(link.getListEnteredAt()) + ")" : "");
+                archives(command) ? " (archived)" : "");
     }
 
     /** Просит ли команда убрать карточку в архив. Null значит «не трогать», а не «достать». */
