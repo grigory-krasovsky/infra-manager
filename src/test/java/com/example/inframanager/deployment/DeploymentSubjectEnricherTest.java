@@ -101,6 +101,33 @@ class DeploymentSubjectEnricherTest {
     }
 
     @Test
+    void keysBambooCouldNotFindInJiraGiveWayToRealIssues() {
+        // Настоящая сборка ЦСВ ORVD-ORVDT-151: JSR-107 и JSR-305 помянуты в коммитах про
+        // зависимости, Bamboo принял их за ключи задач и поставил первыми. Обрезав список
+        // по порядку, мы бы показали в чате ровно их — без названия и со ссылкой в никуда.
+        givenBuild("ORVD-ORVDT-151",
+                new BambooClient.BuildResult.Issue("JSR-107", null),
+                new BambooClient.BuildResult.Issue("JSR-305", null),
+                new BambooClient.BuildResult.Issue("ORVD-1649", "Подготовка для релиза Spring 6 версии"),
+                new BambooClient.BuildResult.Issue("ORVD-1653", "Миграция на Spring 6"));
+
+        assertThat(enricher().subjectFor(event("Child of ORVD-ORVDT-151")).issues())
+                .extracting(DeploymentIssue::key).containsExactly("ORVD-1649", "ORVD-1653");
+    }
+
+    @Test
+    void whenNoKeyHasASummaryTheyAreStillShown() {
+        // Пустое summary может означать и недоступную в момент индексации Jira. Ключ без
+        // названия — всё же лучше, чем строка про задачу, исчезнувшая совсем.
+        givenBuild("ORVD-ORVDT-151",
+                new BambooClient.BuildResult.Issue("ORVD-1649", null),
+                new BambooClient.BuildResult.Issue("ORVD-1653", ""));
+
+        assertThat(enricher().subjectFor(event("Child of ORVD-ORVDT-151")).issues())
+                .extracting(DeploymentIssue::key).containsExactly("ORVD-1649", "ORVD-1653");
+    }
+
+    @Test
     void withoutAnIssueTheMergedPullRequestTakesItsPlace() {
         // Так и выглядят деплои Лизы: в коммитах нет ключа задачи, зато влиты они
         // пул-реквестом, и он говорит, что именно уехало.

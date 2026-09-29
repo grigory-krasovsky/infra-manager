@@ -101,23 +101,35 @@ infra-manager:
           project-name: Лиза
           environment-name: elbrus-dev
 
+        # В Bamboo проект зовётся «ОрВД», коллеги и доска Trello — «ЦСВ»; в сообщение
+        # идёт то имя, которым его называют люди.
         - id: 1736705
-          project-name: ОрВД
+          project-name: ЦСВ
           environment-name: dev
+        # Деплой-проект «ОрВД - test» (29163521) за планом ORVD-ORVDT. Появился позже
+        # остальных: до 14.09.2026 его не существовало, и test оставался виден только
+        # через билд-план ниже, то есть молчал обо всём, кроме провала сборки.
+        - id: 29327361
+          project-name: ЦСВ
+          environment-name: test
+        # Деплой-проекта для prod нет вовсе: план ORVD-ORVDP не деплоит, а за три
+        # секунды делает два git push на деплой-машину, после чего выкладку ведут
+        # скриптом уже там. Объявлять по его успеху «задеплоен» нельзя — он означает
+        # лишь «код доехал». См. docs/runbook.md.
         # These two look like JDK variants rather than stands, and the token's
         # account cannot execute them. Uncomment if they are real deployments.
         #  - id: 8585218
-        #    project-name: ОрВД
+        #    project-name: ЦСВ
         #    environment-name: java11
         #  - id: 8585219
-        #    project-name: ОрВД
+        #    project-name: ЦСВ
         #    environment-name: java17
 
       # Plans whose failure has nowhere else to be seen: a build that never reaches a
       # release produces no deployment result, so the environments above stay silent
-      # about it. One entry per plan behind the environments listed above, plus the
-      # ОрВД test/prod plans, which deploy straight from the plan and have no
-      # deployment project at all -- see docs/runbook.md.
+      # about it. One entry per plan behind the environments listed above, plus any
+      # plan without a deployment project at all -- ORVD-ORVDP is such a plan.
+      # See docs/runbook.md.
       build-plans:
         - key: LIZA-APIP
           project-name: Лиза API
@@ -144,13 +156,16 @@ infra-manager:
           project-name: Лиза
           environment-name: elbrus-dev
         - key: ORVD-DEV
-          project-name: ОрВД
+          project-name: ЦСВ
           environment-name: dev
         - key: ORVD-ORVDT
-          project-name: ОрВД
+          project-name: ЦСВ
           environment-name: test
+        # Провал этого плана — не провал сборки: собирать ему нечего, он только
+        # отправляет ветку prod на деплой-машину. Оставлен потому, что не уехавший
+        # код — тоже новость, и другой о нём не будет.
         - key: ORVD-ORVDP
-          project-name: ОрВД
+          project-name: ЦСВ
           environment-name: prod
 
   telegram:

@@ -289,6 +289,68 @@ class DeploymentMessageRendererTest {
         assertThat(DeploymentMessageRenderer.formatDuration(Duration.ofSeconds(60))).isEqualTo("1 мин 0 с");
     }
 
+    // Три сообщения ниже собраны из настоящих результатов стенда ЦСВ test — так выглядит
+    // то, что увидят в чате. Адреса заменены на вымышленные, всё остальное подлинное.
+
+    @Test
+    void theCsvTestDeploymentReadsAsOneStatement() {
+        // Деплой release-46 от 29.09.2026, сборка ORVD-ORVDT-173.
+        String text = renderer.render(
+                event("SUCCESS", "ЦСВ", "test", "release-46", "1790672307121", "1790672496404",
+                        "Child of <a href=\"https://bamboo.local/browse/ORVD-ORVDT-173\">ORVD-ORVDT-173</a>"),
+                new DeploymentSubject(
+                        List.of(new DeploymentIssue("ORVD-1653", "Миграция на Spring 6",
+                                "https://jira.local/browse/ORVD-1653")),
+                        List.of(),
+                        List.of("Merge branch 'refs/heads/2026-09-03_ORVD-1653_migration-to-sprnig-6' into postgres",
+                                "ORVD-1653 A5: отказ в доступе логируется - accessDeniedPage заменён обработчиком")));
+
+        assertThat(text).isEqualTo("""
+                ✅ <b>ЦСВ</b> задеплоен на <b>test</b>
+                Задача: <a href="https://jira.local/browse/ORVD-1653">ORVD-1653</a> · Миграция на Spring 6
+                Когда: 29.09.2026 12:01, за 3 мин 9 с
+                Запуск: Child of <a href="https://bamboo.local/browse/ORVD-ORVDT-173">ORVD-ORVDT-173</a>
+                Коммиты (2):
+                <blockquote expandable>• Merge branch 'refs/heads/2026-09-03_ORVD-1653_migration-to-sprnig-6' into postgres
+                • ORVD-1653 A5: отказ в доступе логируется - accessDeniedPage заменён обработчиком</blockquote>""");
+    }
+
+    @Test
+    void aFailedCsvDeploymentNamesTheStandAndWhatWasInIt() {
+        // Деплой release-25 от 17.09.2026: упал за 13 секунд, не начав толком.
+        String text = renderer.render(
+                event("FAILED", "ЦСВ", "test", "release-25", "1789642505185", "1789642519126",
+                        "Child of <a href=\"https://bamboo.local/browse/ORVD-ORVDT-151\">ORVD-ORVDT-151</a>"),
+                issues(new DeploymentIssue("ORVD-1649", "Подготовка для релиза Spring 6 версии",
+                                "https://jira.local/browse/ORVD-1649"),
+                        new DeploymentIssue("ORVD-1653", "Миграция на Spring 6",
+                                "https://jira.local/browse/ORVD-1653")));
+
+        assertThat(text).isEqualTo("""
+                ❌ <b>ЦСВ</b> — деплой на <b>test</b> не прошёл (FAILED)
+                Задача: <a href="https://jira.local/browse/ORVD-1649">ORVD-1649</a> · Подготовка для релиза Spring 6 версии
+                Задача: <a href="https://jira.local/browse/ORVD-1653">ORVD-1653</a> · Миграция на Spring 6
+                Когда: 17.09.2026 13:55, за 13 с
+                Запуск: Child of <a href="https://bamboo.local/browse/ORVD-ORVDT-151">ORVD-ORVDT-151</a>""");
+    }
+
+    @Test
+    void aFailedCsvBuildNeverReachesADeploymentAndSaysSoItself() {
+        // ORVD-ORVDT-160 от 22.09.2026: Maven упал, деплой не запускался вовсе, и
+        // окружение test об этой сборке промолчало бы.
+        String text = renderer.renderBuildFailure(new BambooBuildEvent(
+                "ORVD-ORVDT-160", "Failed", "ЦСВ", "test",
+                "2026-09-22T12:59:24.185Z", "2026-09-22T13:02:28.660Z",
+                "Changes by <a href=\"https://bamboo.local/u\">Красовский Григорий</a>",
+                "https://bamboo.local/browse/ORVD-ORVDT-160"));
+
+        assertThat(text).isEqualTo("""
+                ❌ <b>ЦСВ</b> — сборка для <b>test</b> не прошла
+                Когда: 22.09.2026 16:02, за 3 мин 4 с
+                Сборка: <a href="https://bamboo.local/browse/ORVD-ORVDT-160">ORVD-ORVDT-160</a>
+                Запуск: Changes by <a href="https://bamboo.local/u">Красовский Григорий</a>""");
+    }
+
     private static DeploymentSubject issues(DeploymentIssue... issues) {
         return new DeploymentSubject(List.of(issues), List.of(), List.of());
     }

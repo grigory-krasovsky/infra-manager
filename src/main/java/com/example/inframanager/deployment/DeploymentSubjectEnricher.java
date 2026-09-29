@@ -2,6 +2,7 @@ package com.example.inframanager.deployment;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -100,9 +101,21 @@ public class DeploymentSubjectEnricher {
         }
     }
 
+    /**
+     * Ключи задач Bamboo вытаскивает из сообщений коммитов по форме и отдаёт всё, что на
+     * ключ похоже: в сборке миграции ЦСВ первыми в списке пришли {@code JSR-107} и
+     * {@code JSR-305}, помянутые в коммитах про зависимости, а настоящие {@code ORVD-1649}
+     * и {@code ORVD-1653} оказались за ними — и под обрез {@link #MAX_ISSUES} не попадали.
+     *
+     * <p>Отличает одно от другого {@code summary}: Bamboo проставляет его только тем
+     * ключам, которые нашлись в Jira. Безымянные поэтому не выбрасываем — Jira могла быть
+     * недоступна и в момент индексации, — а задвигаем в конец.
+     */
     private List<DeploymentIssue> issues(BambooClient.BuildResult result) {
         return result.issues().stream()
                 .filter(issue -> issue != null && StringUtils.hasText(issue.key()))
+                .sorted(Comparator.comparing(
+                        (BambooClient.BuildResult.Issue issue) -> !StringUtils.hasText(issue.summary())))
                 .limit(MAX_ISSUES)
                 .map(issue -> new DeploymentIssue(issue.key(), issue.summary(), browseUrl(issue.key())))
                 .toList();
